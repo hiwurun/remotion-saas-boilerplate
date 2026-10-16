@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion bundle",
-    "render:landscape": "remotion render SaaS-Landscape out/saas-landscape.mp4",
-    "render:portrait": "remotion render SaaS-Portrait out/saas-portrait.mp4",
+    "render:landscape": "remotion render Lumina-Landscape out/lumina-landscape.mp4",
+    "render:portrait": "remotion render Lumina-Portrait out/lumina-portrait.mp4",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
