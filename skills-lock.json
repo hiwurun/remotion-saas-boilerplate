@@ -72,6 +72,12 @@
       "sourceType": "github",
       "skillPath": "skills/remotion-upgrade/SKILL.md",
       "computedHash": "f734496d18ae621fae039b6b21037a3c013e30a9029d8e8b5b10c77769e63476"
+    },
+    "video-shotcraft": {
+      "source": "Vincentwei1021/video-shotcraft",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "3051157002a2546c11e59096c2ffca505ac72ed60eb35ff287fa40d6104f4a2b"
     }
   }
 }
