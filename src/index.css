@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --lumina-bg: #0a0a0a;
+  --lumina-accent: #d4af37;
+  --lumina-fg: #f5f2ea;
+  --font-sans-lumina: "PP Neue Montreal", "Inter", system-ui, sans-serif;
+  --font-display-lumina: "Cormorant Garamond", Georgia, serif;
+  --font-mono-lumina: "PPSupplyMono", "JetBrains Mono", ui-monospace, monospace;
+}
