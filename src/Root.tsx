@@ -5,6 +5,9 @@ import { LuminaSlider, calculateLuminaMetadata } from "./lumina/LuminaSlider";
 import { LuminaVideoSchema } from "./lumina/schema";
 import { LaunchVideo, calculateLaunchMetadata } from "./launch/LaunchVideo";
 import { LaunchVideoSchema } from "./launch/schema";
+import { OpenVLabVideo, calculateOpenVLabMetadata } from "./openvlab/OpenVLabVideo";
+import { OpenVLabQuadrantPart, OpenVLabRankCardsPart, calculatePartMetadata } from "./openvlab/Parts";
+import { OPENVLAB_DEFAULTS, OpenVLabSchema } from "./openvlab/schema";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -164,6 +167,39 @@ export const RemotionRoot: React.FC = () => {
               "设计一个日程管理看板"
             ]
           }}
+      />
+      <Composition
+        id="OpenVLab-Landscape"
+        component={OpenVLabVideo}
+        width={1920}
+        height={1080}
+        fps={60}
+        durationInFrames={3600}
+        schema={OpenVLabSchema}
+        calculateMetadata={calculateOpenVLabMetadata}
+        defaultProps={OPENVLAB_DEFAULTS}
+      />
+      <Composition
+        id="OpenVLab-Part-RankCards"
+        component={OpenVLabRankCardsPart}
+        width={1920}
+        height={1080}
+        fps={60}
+        durationInFrames={240}
+        schema={OpenVLabSchema}
+        calculateMetadata={calculatePartMetadata}
+        defaultProps={OPENVLAB_DEFAULTS}
+      />
+      <Composition
+        id="OpenVLab-Part-Quadrant"
+        component={OpenVLabQuadrantPart}
+        width={1920}
+        height={1080}
+        fps={60}
+        durationInFrames={240}
+        schema={OpenVLabSchema}
+        calculateMetadata={calculatePartMetadata}
+        defaultProps={OPENVLAB_DEFAULTS}
       />
     </>
   );
