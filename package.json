@@ -2,7 +2,7 @@
   "name": "remotion-saas-boilerplate",
   "version": "1.0.0",
   "private": true,
-  "description": "Remotion v4 SaaS product video boilerplate (landscape + portrait)",
+  "description": "Remotion v4 launch / showcase video templates (Lumina + Launch)",
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion bundle",
