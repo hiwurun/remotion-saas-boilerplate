@@ -14,4 +14,3 @@ Allowed: commercial projects, web, social, ads, films, TV/radio, games.
 - sfx-key.wav:    "Hard single key press in a laptop" (#2542, peak-normalized +0.8 dB to -3 dBFS) https://mixkit.co/free-sound-effects/keyboard/
 - sfx-whoosh.wav: "Fast whoosh transition" (#1490)        https://mixkit.co/free-sound-effects/whoosh/
 - sfx-sweep.wav:  "Short transition sweep" (#175)         https://mixkit.co/free-sound-effects/transition/
-- sfx-tick.wav:   "Classic click" (#1117)                 https://mixkit.co/free-sound-effects/click/

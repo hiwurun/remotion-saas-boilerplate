@@ -10,7 +10,7 @@ export const SectorIcon: React.FC<{ sector: string; size?: number; style?: React
   if (!name) return null;
   const svg = SECTOR_SVG[name];
   if (svg) return <span style={{ display: "inline-block", width: size, height: size, flexShrink: 0, lineHeight: 0, ...style }} dangerouslySetInnerHTML={{ __html: svg }} />;
-  return <Img src={staticFile(`openvlab/sector/${name}.svg`)} style={{ width: size, height: size, flexShrink: 0, ...style }} />;
+  return <Img src={staticFile(`openvlab-market/sector/${name}.svg`)} style={{ width: size, height: size, flexShrink: 0, ...style }} />;
 };
 
 const DIGITS = "0123456789";
