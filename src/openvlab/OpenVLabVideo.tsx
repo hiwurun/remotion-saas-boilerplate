@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, Audio, CalculateMetadataFunction, Easing, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { OpenVLabProps } from "./schema";
-import { C, CLAMP, EASE, EASE_OUT, INTRO_END, INTRO_START, OV_FPS, TOTAL_BEATS, beatProgress, beatToFrame, isUrl, metricShotStart, storyBeat } from "./theme";
+import { C, CLAMP, EASE, EASE_OUT, INTRO_END, blurOf, INTRO_START, OV_FPS, TOTAL_BEATS, beatProgress, beatToFrame, isUrl, metricShotStart, storyBeat } from "./theme";
 import { MONO, SANS } from "./fonts";
 import { buildModel, fill, matchesMetric, metricLabel, type MarketModel } from "./data";
 import { CARDS, PREMIUM_SPANS, TABLE, TABLE_BODY_H, TOOLBAR, TABLE_COLS, WIN, WIN_LEFT, WIN_TOP, cardColumnRect, centerOf, toWorld } from "./layout";
@@ -64,8 +64,8 @@ const TitleCard: React.FC<OpenVLabProps> = ({ brandName, logoSrc, bpm, copy }) =
   const f = useCurrentFrame();
   if (f > beatToFrame(INTRO_END + 0.2, bpm)) return null;
   const inP = (a: number) => beatProgress(f, bpm, a, a + 1.1, EASE_OUT);
-  const out = beatProgress(f, bpm, INTRO_START - 0.5, INTRO_END, EASE);
-  const piece = (p: number, dy = 26) => ({ opacity: p * (1 - out), transform: `translateY(${(1 - p) * dy - out * 46}px) scale(${0.96 + 0.04 * p})`, filter: `blur(${(1 - p) * 14 + out * 10}px)` });
+  const out = beatProgress(f, bpm, INTRO_START - 0.6, INTRO_END, EASE);
+  const piece = (p: number, dy = 26) => ({ opacity: p * (1 - out), transform: `translateY(${(1 - p) * dy - out * 46}px) scale(${0.96 + 0.04 * p})`, filter: blurOf((1 - p) * 14 + out * 10) });
   const logoP = inP(0.15);
   const textP = inP(0.4);
   return (
@@ -186,8 +186,6 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
     { frame: ml(9.4), x: metricTableFocus.x, y: metricTableFocus.y, scale: 1.15 },
     kf(81.8, optFocus, zDD),
     kf(85.4, optFocus, zDD),
-    kf(86.4, winCap, zCap),
-    kf(87.2, winCap, zCap),
     kf(88.6, starFocus, zStar),
     kf(92, starFocus, zStar * 1.02, Easing.inOut(Easing.sin)),
     kf(93.6, center, 1),
@@ -195,8 +193,9 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
   ]);
 
   /* ---------- shot 1: 「今天我们来讲」 + typewriter prompt → send (raw beats 0–6.6) ---------- */
-  const labelIn = nbp(0.2, 1.0);
-  const barIn = nbp(0.3, 1.2);
+  // EASE_OUT so the label/bar are already visible while the title card blurs out (~10-frame overlap)
+  const labelIn = nbp(0.05, 0.85, EASE_OUT);
+  const barIn = nbp(0.15, 1.05, EASE_OUT);
   const typeFrom = nb(1.6);
   const charFrames = dur(0.32);
   const promptChars = Array.from(copy.openPrompt);
@@ -267,8 +266,9 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
   const gridShade = bp(93.6, 95);
   const darkOut = bp(102.4, 104);
   const urlP = bp(104.4, 106);
-  const urlOut = interpolate(f, [b(108.75), b(109)], [0, 1], CLAMP);
-  const logoIn = interpolate(f, [b(109), b(109) + 4], [0, 1], CLAMP);
+  // 0.5-beat eased crossfade (with blur) from the URL to the mark – no hard cut
+  const urlOut = bp(108.5, 109);
+  const logoIn = bp(108.75, 109.25, EASE_OUT);
 
   /* ---------- sound design (scene-local frames; all SFX Mixkit Free License) ---------- */
   // clicks: 发送, 全景图, 筛选, 隐波低位, 应用, 清除全部, 能化, star
@@ -281,7 +281,7 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
     { at: b(63.9), name: "whoosh", volume: 0.3 }, // flip → 全景图
     { at: b(79.3), name: "whoosh", volume: 0.3 }, // flip back → table
     { at: ml(1.8), name: "sweep", volume: 0.22 }, // 数值筛选 dialog opens
-    { at: b(109), name: "sweep", volume: 0.35 }, // logo outro
+    { at: b(108.85), name: "sweep", volume: 0.35 }, // logo outro
   ];
   const wordmark = bp(110, 112);
   const tagP = bp(112.6, 113.8);
@@ -310,7 +310,6 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
     { frame: ml(6.4), x: clearW.x + 60, y: clearW.y + 140 },
     { frame: ml(8.3), x: clearW.x + 2, y: clearW.y + 4 },
     { frame: ml(8.9), x: clearW.x + 2, y: clearW.y + 4 },
-    k(80.8, optAll, 260, 260),
     k(82.2, optAll, 6, 8),
     { ...k(84.1, optTarget, 6, 8), straight: true },
     k(85.2, optTarget, 6, 8),
@@ -319,7 +318,7 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
     k(90.6, starWorld, 2, 4),
   ]);
   const cursorScreen = worldToScreen(cursorWorld, cam, W, H);
-  const cursorOpacity = Math.max(fadeWindow(f, nb(4.2), nb(6.1)), fadeWindow(f, b(61), b(63)), fadeWindow(f, b(74.6), b(77.6)), fadeWindow(f, ml(0.3), ml(5.4)), fadeWindow(f, ml(7.8), ml(9.4)), fadeWindow(f, b(81), b(85.4)), fadeWindow(f, b(87.6), b(90.4)));
+  const cursorOpacity = Math.max(fadeWindow(f, nb(4.2), nb(6.1)), fadeWindow(f, b(61), b(63)), fadeWindow(f, b(74.6), b(77.6)), fadeWindow(f, ml(0.3), ml(5.4)), fadeWindow(f, ml(7.8), b(85.4)), fadeWindow(f, b(87.6), b(90.4)));
   const hoverOpt = f >= b(81.6) && f < b(85.6) && Math.abs(cursorWorld.y - optAll.y) < 30 ? interpolate(cursorWorld.x, optRects.map((r) => r.x + r.w / 2), optRects.map((_, i) => i), CLAMP) : -1;
 
   const showWorld = f < b(104.2);
@@ -415,7 +414,7 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
     <AbsoluteFill style={{ background: C.bg, fontFamily: SANS, overflow: "hidden" }}>
       {showWorld ? (
         <Camera state={cam} width={W} height={H}>
-          {f >= b(93.2) ? <InfiniteGrid cx={WIN.cx} cy={WIN.cy} tileW={WIN.w} tileH={WIN.h} gap={90} cols={11} rows={11} t={gridT} accent={accent} font={SANS} products={model.gridRows} /> : null}
+          {f >= b(93.2) ? <InfiniteGrid cx={WIN.cx} cy={WIN.cy} tileW={WIN.w} tileH={WIN.h} gap={90} cols={11} rows={11} t={gridT} accent={accent} font={SANS} products={model.gridRows} view={{ x0: cam.x - W / 2 / cam.scale, x1: cam.x + W / 2 / cam.scale, y0: cam.y - H / 2 / cam.scale, y1: cam.y + H / 2 / cam.scale }} /> : null}
 
           {winIn > 0 ? (
             <div style={{ position: "absolute", left: WIN_LEFT, top: WIN_TOP, width: WIN.w, height: WIN.h, opacity: interpolate(winIn, [0, 0.4], [0, 1], CLAMP), transform: `scale(${winScale})` }}>
@@ -469,7 +468,7 @@ const OpenVLabScene: React.FC<OpenVLabProps & { model: MarketModel }> = (props) 
 
           {/* SHOT 1: label + input box with typewriter prompt */}
           {f < nb(6.8) ? (
-            <div style={{ position: "absolute", inset: 0, opacity: 1 - openOut, transform: `translateY(${-openOut * 40}px)`, filter: `blur(${openOut * 8}px)` }}>
+            <div style={{ position: "absolute", inset: 0, opacity: 1 - openOut, transform: `translateY(${-openOut * 40}px)`, filter: blurOf(openOut * 8) }}>
               <div style={{ position: "absolute", left: 0, width: W, top: barC.y - barC.h / 2 - 118, display: "flex", justifyContent: "center", fontSize: 56, fontWeight: 600, letterSpacing: "-0.02em", color: C.ink, opacity: labelIn, transform: `translateY(${(1 - labelIn) * 18}px)` }}>
                 {copy.openLabel}
               </div>

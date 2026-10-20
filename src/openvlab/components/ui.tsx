@@ -1,3 +1,4 @@
+import { SECTOR_SVG } from "../sectorSvgs";
 import React from "react";
 import { Easing, Img, interpolate, staticFile } from "remotion";
 import { C, CLAMP, withAlpha } from "../theme";
@@ -7,6 +8,8 @@ import { SECTOR_ICON } from "../data";
 export const SectorIcon: React.FC<{ sector: string; size?: number; style?: React.CSSProperties }> = ({ sector, size = 22, style }) => {
   const name = SECTOR_ICON[sector];
   if (!name) return null;
+  const svg = SECTOR_SVG[name];
+  if (svg) return <span style={{ display: "inline-block", width: size, height: size, flexShrink: 0, lineHeight: 0, ...style }} dangerouslySetInnerHTML={{ __html: svg }} />;
   return <Img src={staticFile(`openvlab/sector/${name}.svg`)} style={{ width: size, height: size, flexShrink: 0, ...style }} />;
 };
 
@@ -117,6 +120,8 @@ export const Block: React.FC<{ p: number; accent: string; style?: React.CSSPrope
  * indicator (IV) line strokeWidth 1 in --vlab-purple #a21caf, each series min–max scaled to the full height;
  * optional HH:mm start/end labels (10px muted) under the plot. `reveal` 0..1 draws the series left → right.
  */
+const PATH_CACHE = new WeakMap<(number | null)[], Map<string, { line: string; area: string; iline: string }>>();
+
 export const LineSvg: React.FC<{ data: (number | null)[]; indicator?: (number | null)[]; width: number; height: number; lineColor: string; indicatorColor?: string; strokeWidth?: number; showTime?: { start: string; end: string } | null; timeSize?: number; reveal?: number; id: string }> = ({ data, indicator, width, height, lineColor, indicatorColor = "#a21caf", strokeWidth = 1.2, showTime = null, timeSize = 10, reveal = 1, id }) => {
   if (data.length < 2) return null;
   const textH = showTime ? timeSize + 4 : 0;
@@ -131,12 +136,22 @@ export const LineSvg: React.FC<{ data: (number | null)[]; indicator?: (number | 
     const range = max - min || 1;
     return valid.filter((p) => p.i < n).map((p) => ({ x: (p.i / (arr.length - 1)) * width, y: height - ((p.v - min) / range) * height }));
   };
-  const pc = coords(data);
-  if (pc.length < 1) return null;
-  const line = pc.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(2)},${c.y.toFixed(2)}`).join(" ");
-  const area = `M ${pc[0].x},${height} L ${pc[0].x},${pc[0].y} ${line.substring(line.indexOf("L"))} L ${pc[pc.length - 1].x},${height} Z`;
-  const ic = indicator && indicator.length > 1 ? coords(indicator) : null;
-  const iline = ic ? ic.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(2)},${c.y.toFixed(2)}`).join(" ") : "";
+  // paths are pure in (data, indicator, size, n) → cached per series (perf: rebuilt every frame otherwise)
+  const key = `${width}|${height}|${n}`;
+  let perData = PATH_CACHE.get(data);
+  if (!perData) PATH_CACHE.set(data, (perData = new Map()));
+  let cached = perData.get(key + (indicator ? "|i" : ""));
+  if (!cached) {
+    const pc = coords(data);
+    if (pc.length < 1) return null;
+    const line = pc.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(2)},${c.y.toFixed(2)}`).join(" ");
+    const area = `M ${pc[0].x},${height} L ${pc[0].x},${pc[0].y} ${line.substring(line.indexOf("L"))} L ${pc[pc.length - 1].x},${height} Z`;
+    const ic = indicator && indicator.length > 1 ? coords(indicator) : null;
+    const iline = ic ? ic.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(2)},${c.y.toFixed(2)}`).join(" ") : "";
+    cached = { line, area, iline };
+    perData.set(key + (indicator ? "|i" : ""), cached);
+  }
+  const { line, area, iline } = cached;
   const gid = `ov-area-${id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
     <svg width={width} height={height + textH} viewBox={`0 0 ${width} ${height + textH}`} style={{ display: "block", overflow: "visible" }}>

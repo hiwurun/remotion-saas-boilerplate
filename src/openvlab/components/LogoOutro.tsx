@@ -1,6 +1,6 @@
 import React from "react";
 import { interpolate } from "remotion";
-import { C, CLAMP, EASE } from "../theme";
+import { C, CLAMP, EASE, blurOf } from "../theme";
 import { BrandMark } from "./BrandMark";
 
 /**
@@ -17,12 +17,12 @@ export const LogoOutro: React.FC<{ width: number; height: number; url: string; b
   const lift = interpolate(tagP, [0, 1], [0, -40], { ...CLAMP, easing: EASE });
   return (
     <div style={{ position: "absolute", inset: 0, width, height, fontFamily: font }}>
-      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: 92, letterSpacing: "-0.03em", color: C.ink, opacity: urlP * (1 - urlOut), transform: `scale(${urlScale})`, filter: `blur(${(1 - urlP) * 8}px)` }}>
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: 92, letterSpacing: "-0.03em", color: C.ink, opacity: urlP * (1 - urlOut), transform: `scale(${urlScale * (1 + 0.04 * urlOut)})`, filter: blurOf((1 - urlP) * 8 + urlOut * 12) }}>
         <span style={{ color: C.muted }}>www.</span>
         {url}
       </div>
       {logoIn > 0 ? (
-        <div style={{ position: "absolute", left: width / 2 - markSize / 2 + shift, top: height / 2 - markSize / 2 + lift, width: markSize, height: markSize, opacity: logoIn, transform: `scale(${0.92 + 0.08 * logoIn})` }}>
+        <div style={{ position: "absolute", left: width / 2 - markSize / 2 + shift, top: height / 2 - markSize / 2 + lift, width: markSize, height: markSize, opacity: logoIn, transform: `scale(${0.92 + 0.08 * logoIn})`, filter: blurOf((1 - logoIn) * 10) }}>
           <BrandMark size={markSize} src={logoSrc} glow={logoIn} />
         </div>
       ) : null}
@@ -32,7 +32,7 @@ export const LogoOutro: React.FC<{ width: number; height: number; url: string; b
         </div>
       ) : null}
       {tagP > 0 ? (
-        <div style={{ position: "absolute", left: 0, width, top: height / 2 + 70, display: "flex", flexDirection: "column", alignItems: "center", gap: 14, opacity: tagP, transform: `translateY(${(1 - tagP) * 16}px)`, filter: `blur(${(1 - tagP) * 6}px)` }}>
+        <div style={{ position: "absolute", left: 0, width, top: height / 2 + 70, display: "flex", flexDirection: "column", alignItems: "center", gap: 14, opacity: tagP, transform: `translateY(${(1 - tagP) * 16}px)`, filter: blurOf((1 - tagP) * 6) }}>
           <div style={{ fontSize: 44, fontWeight: 500, color: C.ink, letterSpacing: "0.02em" }}>{tagline}</div>
           <div style={{ fontSize: 36, fontFamily: mono, color: accent }}>{url}</div>
         </div>

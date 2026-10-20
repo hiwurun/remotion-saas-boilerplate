@@ -11,6 +11,8 @@ export const OV_FPS = 60;
 /** Heavy in-out: leaves fast, settles slowly. */
 export const EASE = Easing.bezier(0.7, 0, 0.12, 1);
 export const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
+/** CSS blur only while it is visible – blur(0px) still forces a filter layer (render cost). */
+export const blurOf = (px: number) => (px > 0.05 ? `blur(${px.toFixed(2)}px)` : undefined);
 
 export const C = {
   /** video stage background (theme-color dark #12161f darkened toward the app's pure black) */

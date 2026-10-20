@@ -37,7 +37,7 @@ export const ProductTile: React.FC<{ row: MarketRow; w: number; h: number; accen
 };
 
 /** Dense grid of product tiles around a centre cell (the centre is left empty for the live window). */
-export const InfiniteGrid: React.FC<{ cx: number; cy: number; tileW: number; tileH: number; gap: number; cols: number; rows: number; t: number; accent: string; font: string; products: MarketRow[] }> = ({ cx, cy, tileW, tileH, gap, cols, rows, t, accent, font, products }) => {
+export const InfiniteGrid: React.FC<{ cx: number; cy: number; tileW: number; tileH: number; gap: number; cols: number; rows: number; t: number; accent: string; font: string; products: MarketRow[]; view?: { x0: number; y0: number; x1: number; y1: number } }> = ({ cx, cy, tileW, tileH, gap, cols, rows, t, accent, font, products, view }) => {
   const tiles: React.ReactNode[] = [];
   const hc = Math.floor(cols / 2);
   const hr = Math.floor(rows / 2);
@@ -52,6 +52,8 @@ export const InfiniteGrid: React.FC<{ cx: number; cy: number; tileW: number; til
       if (p <= 0 || !row) continue;
       const x = cx + c * (tileW + gap) - tileW / 2;
       const y = cy + r * (tileH + gap) - tileH / 2;
+      // cull tiles fully outside the camera view (world coords; +60 px for the rise-in offset)
+      if (view && (x > view.x1 || x + tileW < view.x0 || y > view.y1 + 60 || y + tileH < view.y0)) continue;
       tiles.push(
         <div key={`${r}-${c}`} style={{ position: "absolute", left: x, top: y, width: tileW, height: tileH, opacity: p, transform: `translateY(${(1 - p) * 60}px)` }}>
           <ProductTile row={row} w={tileW} h={tileH} accent={accent} font={font} />

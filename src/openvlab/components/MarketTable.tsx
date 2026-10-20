@@ -95,12 +95,14 @@ export const MarketTable: React.FC<{
   // collapse amount per row (stagger by position among non-matching rows near the top)
   let nonIdx = 0;
   let mIdx = 0;
-  const items = rows.map((r) => {
+  const items = rows.map((r, ri) => {
     let mFade = 0;
     let mCollapse = 0;
     if (metric && !metric.pred(r)) {
       const k = Math.min(mIdx++, 14);
-      const back = metric.showT >= 0 ? interpolate(metric.showT, [k, k + 22], [0, 1], { ...CLAMP, easing: EASE }) : 0;
+      // 清除全部: rows return staggered by their on-screen (final) position, top → bottom – no batch pop
+      const kb = Math.min(ri, 20) * 1.6;
+      const back = metric.showT >= 0 ? interpolate(metric.showT, [kb, kb + 22], [0, 1], { ...CLAMP, easing: EASE }) : 0;
       if (metric.hideT >= 0) {
         mFade = interpolate(metric.hideT, [k * 2, k * 2 + 14], [0, 1], { ...CLAMP, easing: EASE }) * (1 - back);
         mCollapse = interpolate(metric.hideT, [k * 2 + 8, k * 2 + 34], [0, 1], { ...CLAMP, easing: EASE }) * (1 - back);

@@ -1,5 +1,5 @@
 import React from "react";
-import { interpolate, interpolateColors } from "remotion";
+import { Easing, interpolate, interpolateColors } from "remotion";
 import { C, CLAMP, EASE, EASE_OUT, withAlpha } from "../theme";
 import { QUADRANTS, formatNumber, formatPct, invSymlog, topLabelsPerQuad, withSign, type AxisDomain, type QuadPoint } from "../data";
 
@@ -142,7 +142,7 @@ export const QuadrantChart: React.FC<{
         const k = rankOf.get(p.row.product) ?? 0;
         const u = k / Math.max(1, N - 1);
         const delay = popDur * (1 - (1 - u) * (1 - u)) * 0.85; // accelerating: gaps shrink over time
-        const s = interpolate(popT, [delay, delay + 10, delay + 18], [0, 1.25, 1], CLAMP);
+        const s = popT <= delay ? 0 : popT < delay + 10 ? interpolate(popT, [delay, delay + 10], [0, 1.18], { ...CLAMP, easing: Easing.out(Easing.cubic) }) : interpolate(popT, [delay + 10, delay + 22], [1.18, 1], { ...CLAMP, easing: Easing.inOut(Easing.sin) });
         if (s <= 0) return null;
         const pos = g.toPx(p);
         const base = p.x >= 0 ? C.up : C.down;

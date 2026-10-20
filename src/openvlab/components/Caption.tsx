@@ -1,5 +1,5 @@
 import React from "react";
-import { C } from "../theme";
+import { C, blurOf } from "../theme";
 
 /** Highlights numbers (incl. sign / decimals) in the accent colour. */
 const Numbered: React.FC<{ text: string; accent: string }> = ({ text, accent }) => {
@@ -31,7 +31,7 @@ export const Caption: React.FC<{ text: string; sub?: string; p: number; out: num
           fontFamily: font,
           opacity: o,
           transform: `translateY(${(1 - p) * 18 - out * 22}px)`,
-          filter: `blur(${(1 - p) * 10 + out * 6}px)`,
+          filter: blurOf((1 - p) * 10 + out * 6),
         }}
       >
         <div style={{ fontSize: size, fontWeight: 600, letterSpacing: "-0.02em", color: C.ink, lineHeight: 1.15, whiteSpace: "nowrap" }}>{text}</div>
