@@ -483,7 +483,7 @@ export const OpenVlabSurfVideo: React.FC = () => {
           专业、极简、跨平台的期权行情与风险分析工具 · <span style={{ color: AMBER_HI }}>openvlab.cn</span>
         </div>
       ) : null}
-      <Audio src={staticFile("openvlab-market/audio/bgm.mp3")} volume={(fr) => interpolate(fr, [0, sec(1), TOTAL - sec(3), TOTAL - sec(0.13)], [0, 0.5, 0.5, 0], CLAMP)} />
+      <Audio src={staticFile("openvlab-surf/bgm-vlog-beat.mp3")} volume={(fr) => interpolate(fr, [0, sec(1), TOTAL - sec(3), TOTAL - sec(0.13)], [0, 0.5, 0.5, 0], CLAMP)} />
     </AbsoluteFill>
   );
 };
