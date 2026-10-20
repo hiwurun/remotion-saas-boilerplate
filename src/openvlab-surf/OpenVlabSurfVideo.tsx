@@ -390,7 +390,7 @@ export const OpenVlabSurfVideo: React.FC = () => {
           <BrandMark size={MARK} src="openvlab-surf/logo-disc.svg" glow={disc * (1 - mark)} />
         </div>
       ) : null}
-      {(f < sec(4.8) || f >= sec(15)) && f < sec(END.glOut[1]) ? <SurfaceCanvas state={state} width={W} height={H} /> : null}
+      {f < sec(END.glOut[1]) ? <SurfaceCanvas state={state} width={W} height={H} active={f < sec(4.8) || f >= sec(15)} /> : null}
       <AbsoluteFill style={{ pointerEvents: "none", background: "radial-gradient(ellipse 90% 85% at 50% 45%, rgba(5,6,8,0) 62%, rgba(5,6,8,0.6) 100%)" }} />
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 300, background: "linear-gradient(to bottom, rgba(5,6,8,0) 0%, rgba(5,6,8,0.8) 50%, rgba(5,6,8,0.95) 100%)" }} />
 

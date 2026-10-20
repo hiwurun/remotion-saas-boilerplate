@@ -25,7 +25,19 @@ const oiExtent = (d: RawExpiry): [number, number, number] => {
   return [Math.floor(minOid / step) * step, Math.ceil(maxStack / step) * step, step];
 };
 
+const CACHE = new Map<string, VolChartRender>();
 export const renderVolChart = (d: RawExpiry, reveal: Reveal, width: number, height: number, keep = false): VolChartRender => {
+  if (keep) return renderVolChartUncached(d, reveal, width, height, true);
+  const key = `${d.expiry}|${width}x${height}|${reveal.today}|${reveal.yday}|${reveal.fwd}|${reveal.oi}|${reveal.quotes}`;
+  let hit = CACHE.get(key);
+  if (!hit) {
+    hit = renderVolChartUncached(d, reveal, width, height, false);
+    if (CACHE.size > 2000) CACHE.clear();
+    CACHE.set(key, hit);
+  }
+  return hit;
+};
+const renderVolChartUncached = (d: RawExpiry, reveal: Reveal, width: number, height: number, keep: boolean): VolChartRender => {
   const [mn, mx, iv] = oiExtent(d);
   const option = buildVolChartOption(d, reveal);
   option.yAxis[1].min = mn;

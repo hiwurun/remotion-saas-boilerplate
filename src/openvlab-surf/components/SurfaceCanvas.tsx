@@ -3,7 +3,7 @@ import { DATASET, PEAK, PROTECT } from "../data";
 import { SceneState, SurfaceScene } from "../surface3d";
 
 /** Owns the WebGL renderer; re-renders synchronously on every frame from the pure `state`. */
-export const SurfaceCanvas: React.FC<{ state: SceneState; width: number; height: number }> = ({ state, width, height }) => {
+export const SurfaceCanvas: React.FC<{ state: SceneState; width: number; height: number; active?: boolean }> = ({ state, width, height, active = true }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<SurfaceScene | null>(null);
   useLayoutEffect(() => {
@@ -20,9 +20,9 @@ export const SurfaceCanvas: React.FC<{ state: SceneState; width: number; height:
   }, [width, height]);
   useLayoutEffect(() => {
     const scene = sceneRef.current;
-    if (!scene) return;
+    if (!scene || !active) return;
     scene.update(state);
     scene.render();
   });
-  return <canvas ref={canvasRef} width={width} height={height} style={{ position: "absolute", inset: 0, width, height }} />;
+  return <canvas ref={canvasRef} width={width} height={height} style={{ position: "absolute", inset: 0, width, height, visibility: active ? "visible" : "hidden" }} />;
 };

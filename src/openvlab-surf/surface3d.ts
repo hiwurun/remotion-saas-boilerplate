@@ -189,7 +189,21 @@ export class SurfaceScene {
     this.surfaceGeo.setIndex(indices);
     this.surfaceMat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: RS.surfaceRoughness, metalness: RS.surfaceMetalness, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0, transparent: true, opacity: 1 });
     const surfaceMesh = new THREE.Mesh(this.surfaceGeo, this.surfaceMat);
-    this.wireGeo = new THREE.WireframeGeometry(this.surfaceGeo);
+    // wireframe = the triangles' unique edges (same set WireframeGeometry builds), indexed into the surface's own
+    // position attribute so per-frame vertex updates need no geometry rebuild / GPU realloc
+    const edges = new Set<number>();
+    const edgeIdx: number[] = [];
+    for (let i = 0; i < indices.length; i += 3) {
+      for (const [a, b] of [[indices[i]!, indices[i + 1]!], [indices[i + 1]!, indices[i + 2]!], [indices[i + 2]!, indices[i]!]] as const) {
+        const key = Math.min(a, b) * n + Math.max(a, b);
+        if (edges.has(key)) continue;
+        edges.add(key);
+        edgeIdx.push(a, b);
+      }
+    }
+    this.wireGeo = new THREE.BufferGeometry();
+    this.wireGeo.setAttribute("position", this.surfaceGeo.getAttribute("position"));
+    this.wireGeo.setIndex(edgeIdx);
     this.wireMat = new THREE.LineBasicMaterial({ color: new THREE.Color(PAL.wireframe), transparent: true, opacity: RS.wireOpacity });
     this.wire = new THREE.LineSegments(this.wireGeo, this.wireMat);
     this.scene.add(surfaceMesh, this.wire);
@@ -464,8 +478,7 @@ export class SurfaceScene {
       pos.needsUpdate = true;
       this.surfaceGeo.computeVertexNormals();
       this.surfaceGeo.computeBoundingSphere();
-      this.wire.geometry.dispose();
-      this.wire.geometry = new THREE.WireframeGeometry(this.surfaceGeo);
+      this.wireGeo.computeBoundingSphere();
       this.lastFan = fan;
     }
     if (fanChanged || dim !== this.lastDim || vColor !== this.lastVColor) {
