@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import * as THREE from "three";
-import { AbsoluteFill, Audio, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Easing, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { C, CLAMP, EASE_OUT, blurOf } from "../openvlab-market/theme";
 import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { MONO, SANS } from "../shared/fonts";
@@ -8,7 +8,7 @@ import { SurfaceCanvas } from "./components/SurfaceCanvas";
 import { SlicePanel, HoverTooltip } from "./components/SlicePanel";
 import { VolChartCard, renderVolChart } from "./components/VolChart2D";
 import { createLegendGradient, VOLATILITY_STOPS } from "./constants";
-import { DATASET, EXPIRIES, LAST_TIME, NEAR, PRODUCT, PRODUCT_NAME, PROTECT_FAR, PROTECT_NEAR, PROTECT_STRIKE, TERM_FIRST, fmt, rawExpiry } from "./data";
+import { DATASET, EXPIRIES, LAST_TIME, LOW, NEAR, PEAK, PRODUCT, PRODUCT_NAME, PROTECT_FAR, PROTECT_NEAR, PROTECT_STRIKE, TERM_FIRST, fmt, fmtInt, rawExpiry } from "./data";
 import { buildSurfaceSliceData, getSurfaceVolAt } from "./model/surface-model";
 import { FPS, H, TOTAL, W, cameraAt, cameraKeys, fadeWin, prog, sec } from "./timeline";
 import type { SceneState } from "./surface3d";
@@ -18,9 +18,18 @@ const M = DATASET.mappings;
 const NEAR_Z = M.daysToZ(NEAR.days);
 const COL_X = M.strikeToX(PROTECT_STRIKE);
 const PEAK_PT = new THREE.Vector3(COL_X, M.volToY(PROTECT_NEAR.vol), NEAR_Z);
-const KEYS = cameraKeys(NEAR_Z, COL_X, PEAK_PT);
+const ATM_X = M.strikeToX(NEAR.forward);
+const KEYS = cameraKeys(NEAR_Z, COL_X, PEAK_PT, ATM_X);
 const RAW = rawExpiry(NEAR.exp);
+/* factual sublines – all computed from the near-month payload / surface */
+const ATM_CHG = RAW.atmvol_tday - RAW.atmvol_yday;
+const OI_TOP = [...Object.entries(RAW.strike_poi_c).map(([k, v]) => ({ k: Number(k), v, side: "看涨" })), ...Object.entries(RAW.strike_poi_p).map(([k, v]) => ({ k: Number(k), v, side: "看跌" }))].reduce((a, b) => (b.v > a.v ? b : a));
+const Q_K = RAW.theovol_tday.map((p) => p[0]).reduce((a, b) => (Math.abs(b - RAW.forward_td) < Math.abs(a - RAW.forward_td) ? b : a));
+const qAt = (a: [number, number][]) => a.find((p) => p[0] === Q_K)?.[1];
+const Q_BID = qAt(RAW.mktvol_tday_call_bid);
+const Q_ASK = qAt(RAW.mktvol_tday_call_ask);
 const ATM_NEAR = TERM_FIRST.vol;
+const EASE_IO = Easing.bezier(0.45, 0, 0.25, 1);
 const IVC = "#B98AE6"; // --vlab-iv (dark) oklch(0.74 0.12 300)
 const AMBER = "#F7931A"; // openvlab.cn brand amber
 const AMBER_HI = "#FFB454";
@@ -46,6 +55,12 @@ const LAND_AT = 15.95;
 /* ---- example: virtual hover cursor path (strike, days) ---- */
 const EX = { appear: 28.6, toStrike: [29.0, 30.4] as const, toFar: [33.8, 37.2] as const, out: 40.8 };
 const DAYS = DATASET.days;
+/* ---- axes shot: show each axis in use on the real surface ---- */
+const AX = { strike: [19.4, 22.0] as const, expiry: [22.3, 25.0] as const, iv: [25.3, 27.8] as const, pinRun: [22.7, 24.7] as const, ruler: [25.6, 26.8] as const };
+const pinAt = (f: number) => {
+  const days = NEAR.days + (PROTECT_FAR.days - NEAR.days) * prog(f, AX.pinRun[0], AX.pinRun[1], EASE_IO);
+  return { days, vol: getSurfaceVolAt(PROTECT_STRIKE, days, DATASET) };
+};
 const hoverAt = (f: number) => {
   const a = prog(f, EX.toStrike[0], EX.toStrike[1]);
   const b = prog(f, EX.toFar[0], EX.toFar[1]);
@@ -158,7 +173,9 @@ const sceneState = (f: number): SceneState => {
   const fan = opening ? 1 : prog(f, 15.7, 18.8, (x) => x);
   const vm = prog(f, END.morph[0], END.morph[1]);
   // one bright thing per shot: in the example the surface steps back behind the cursor + slices
-  const dim = 0.7 * fadeWin(f, 28.2, 41.2, 0.8);
+  const axDim = 0.5 * fadeWin(f, AX.strike[0], AX.expiry[1], 0.5);
+  const dim = Math.max(0.7 * fadeWin(f, 28.2, 41.2, 0.8), axDim);
+  const axTerm = fadeWin(f, AX.expiry[0], AX.expiry[1], 0.4);
   const h = hoverAt(f);
   return {
     camera: cameraAt(f, KEYS),
@@ -178,18 +195,97 @@ const sceneState = (f: number): SceneState => {
     vColor: prog(f, END.color[0], END.color[1]),
     vShape: vm > 0 ? vShape() : null,
     smileDays: NEAR.days,
-    smileDraw: 0,
-    smileAlpha: 0,
+    smileDraw: prog(f, AX.strike[0], AX.strike[0] + 1.0, EASE_IO),
+    smileAlpha: fadeWin(f, AX.strike[0], AX.strike[1], 0.4),
     // thin slice along the protection strike, drawn exactly as far as the cursor has travelled
-    termDraw: termFrac(h.days),
-    termAlpha: fadeWin(f, EX.toFar[0], EX.out, 0.4),
+    termDraw: axTerm > 0 ? prog(f, AX.expiry[0], AX.expiry[0] + 0.7, EASE_IO) : termFrac(h.days),
+    termAlpha: Math.max(axTerm, fadeWin(f, EX.toFar[0], EX.out, 0.4)),
     hookAlpha: opening ? 0 : surf * (1 - prog(f, 18.4, 19.2)),
     // the edge only extends past the chart window together with the surface growing under it
     edgeDraw: EDGE_FRAC + (1 - EDGE_FRAC) * prog(f, 15.8, 17.2),
-    peak: 0,
+    // IV beat: the surface maximum pulses (frame-driven, deterministic)
+    peak: fadeWin(f, AX.iv[0], AX.iv[1], 0.4) * (0.7 + 0.3 * Math.cos(((f / FPS - AX.iv[0]) * Math.PI * 2) / 1.2)),
     oiGrow: 0,
     glow: 0,
   };
+};
+
+/* ---- axes shot overlays: pins / bracket / ruler / legend pointer, all projected from the real surface ---- */
+const TAG: React.CSSProperties = { position: "absolute", transform: "translate(-50%, -100%)", padding: "6px 12px", borderRadius: 8, background: "rgba(14,14,18,0.82)", border: "1px solid rgba(255,255,255,0.14)", color: C.ink, fontFamily: MONO, fontSize: 24, whiteSpace: "nowrap" };
+const Pin: React.FC<{ p: { x: number; y: number }; rise: number; o: number; label: string; value: string; color: string }> = ({ p, rise, o, label, value, color }) => {
+  const h = 78 * rise;
+  return (
+    <>
+      <svg width={W} height={H} style={{ position: "absolute", inset: 0, opacity: o }}>
+        <line x1={p.x} y1={p.y} x2={p.x} y2={p.y - h} stroke={color} strokeWidth={2} />
+        <circle cx={p.x} cy={p.y} r={6} fill="#fff" stroke={color} strokeWidth={3} />
+      </svg>
+      <div style={{ ...TAG, left: p.x, top: p.y - h - 8, opacity: o * rise }}>
+        <span style={{ color: C.muted, marginRight: 10 }}>{label}</span>
+        {value}
+      </div>
+    </>
+  );
+};
+const AxesDemo: React.FC<{ f: number; proj: (p: THREE.Vector3) => { x: number; y: number } }> = ({ f, proj }) => {
+  const V3 = (strike: number, vol: number, days: number) => new THREE.Vector3(M.strikeToX(strike), M.volToY(vol), M.daysToZ(days));
+  const atmVol = RAW.atmvol_tday;
+  const so = fadeWin(f, AX.strike[0] + 0.6, AX.strike[1], 0.4);
+  const eo = fadeWin(f, AX.expiry[0] + 0.2, AX.expiry[1], 0.4);
+  const io = fadeWin(f, AX.iv[0], AX.iv[1], 0.4);
+  if (so + eo + io <= 0) return null;
+  const out: React.ReactNode[] = [];
+  if (so > 0) {
+    const r1 = prog(f, AX.strike[0] + 0.6, AX.strike[0] + 1.3, EASE_OUT);
+    const r2 = prog(f, AX.strike[0] + 1.0, AX.strike[0] + 1.7, EASE_OUT);
+    const pa = proj(V3(NEAR.forward, atmVol, NEAR.days));
+    const pk = proj(V3(PROTECT_STRIKE, PROTECT_NEAR.vol, NEAR.days));
+    const pb = proj(V3(PROTECT_STRIKE, atmVol, NEAR.days));
+    const br = prog(f, AX.strike[0] + 1.6, AX.strike[0] + 2.2, EASE_OUT);
+    const bx = pk.x + 46;
+    out.push(
+      <React.Fragment key="s">
+        <Pin p={pa} rise={r1} o={so} label="平值" value={`${fmt(atmVol)}%`} color={IVC} />
+        <Pin p={pk} rise={r2} o={so} label={String(PROTECT_STRIKE)} value={`${fmt(PROTECT_NEAR.vol)}%`} color={AMBER_HI} />
+        <svg width={W} height={H} style={{ position: "absolute", inset: 0, opacity: so * br }}>
+          <line x1={pa.x} y1={pa.y} x2={pb.x + (bx - pb.x) * br} y2={pb.y} stroke="rgba(255,255,255,0.45)" strokeWidth={1.5} strokeDasharray="5 6" />
+          <path d={`M${bx - 10} ${pb.y} H${bx} V${pb.y + (pk.y - pb.y) * br} H${bx - 10}`} fill="none" stroke={AMBER_HI} strokeWidth={2} />
+        </svg>
+        <div style={{ position: "absolute", left: bx + 14, top: (pb.y + pk.y) / 2, transform: "translateY(-50%)", opacity: so * br, color: AMBER_HI, fontFamily: MONO, fontSize: 30, fontWeight: 600 }}>{`+${fmt(PROTECT_NEAR.vol - atmVol)}`}</div>
+      </React.Fragment>,
+    );
+  }
+  if (eo > 0) {
+    const pin = pinAt(f);
+    const pp = proj(V3(PROTECT_STRIKE, pin.vol, pin.days));
+    out.push(<Pin key="e" p={pp} rise={prog(f, AX.expiry[0] + 0.2, AX.expiry[0] + 0.8, EASE_OUT)} o={eo} label={`${PROTECT_STRIKE} · ${Math.round(pin.days)} 天`} value={`${fmt(pin.vol)}%`} color={AMBER_HI} />);
+  }
+  if (io > 0) {
+    const { minVol, maxVol } = DATASET.domain;
+    const t = prog(f, AX.ruler[0], AX.ruler[1], EASE_IO);
+    const pk = V3(PEAK.strike, PEAK.vol, PEAK.daysToExpiry);
+    const y0 = M.volToY(minVol); // base of the colour scale (= legend left end)
+    const floor = proj(new THREE.Vector3(pk.x, y0, pk.z));
+    const tipY = y0 + (pk.y - y0) * t;
+    const tip = proj(new THREE.Vector3(pk.x, tipY, pk.z));
+    const v = Math.min(maxVol, Math.max(minVol, M.yToVol(tipY)));
+    const lx = W / 2 - 220 + 440 * ((v - minVol) / (maxVol - minVol));
+    const lo = proj(V3(LOW.strike, LOW.vol, LOW.daysToExpiry));
+    out.push(
+      <React.Fragment key="v">
+        <svg width={W} height={H} style={{ position: "absolute", inset: 0, opacity: io }}>
+          <line x1={floor.x} y1={floor.y} x2={tip.x} y2={tip.y} stroke="rgba(255,255,255,0.8)" strokeWidth={1.5} />
+          <line x1={floor.x - 8} y1={floor.y} x2={floor.x + 8} y2={floor.y} stroke="rgba(255,255,255,0.8)" strokeWidth={1.5} />
+          <line x1={tip.x - 8} y1={tip.y} x2={tip.x + 8} y2={tip.y} stroke="rgba(255,255,255,0.8)" strokeWidth={1.5} />
+          <path d={`M${lx - 7} 996 L${lx + 7} 996 L${lx} 1005 Z`} fill="#fff" />
+          <circle cx={lo.x} cy={lo.y} r={4} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} opacity={prog(f, AX.ruler[1], AX.ruler[1] + 0.5)} />
+        </svg>
+        <div style={{ ...TAG, left: tip.x + 16, top: tip.y, transform: "translate(0, -50%)", opacity: io * prog(f, AX.ruler[0], AX.ruler[0] + 0.3) }}>{`${fmt(v)}%`}</div>
+        <div style={{ ...TAG, left: lo.x, top: lo.y - 10, fontSize: 18, padding: "3px 8px", color: C.muted, opacity: io * 0.7 * prog(f, AX.ruler[1], AX.ruler[1] + 0.5) }}>{`最低 ${fmt(LOW.vol)}%`}</div>
+      </React.Fragment>,
+    );
+  }
+  return <>{out}</>;
 };
 
 const Headline: React.FC<{ f: number; a: number; b: number; text: React.ReactNode; sub?: string; y?: number; size?: number }> = ({ f, a, b, text, sub, y = 900, size = 64 }) => {
@@ -333,11 +429,11 @@ export const OpenVlabSurfVideo: React.FC = () => {
         </svg>
       ) : null}
       <Headline f={f} a={5.2} b={6.8} text="这是一条波动率曲线" y={CHART_CAP_Y} />
-      <Headline f={f} a={6.9} b={8.7} text="紫线：今天的隐波" sub="越高，期权越贵" y={CHART_CAP_Y} />
-      <Headline f={f} a={8.8} b={10.0} text="灰线：昨天的隐波" y={CHART_CAP_Y} />
+      <Headline f={f} a={6.9} b={8.7} text="紫线：今天的隐波" sub={`越高，期权越贵　平值 ${fmt(RAW.atmvol_tday)}%`} y={CHART_CAP_Y} />
+      <Headline f={f} a={8.8} b={10.0} text="灰线：昨天的隐波" sub={`平值 ${fmt(RAW.atmvol_yday)}% → ${fmt(RAW.atmvol_tday)}%（${ATM_CHG > 0 ? "+" : ""}${fmt(ATM_CHG)}）`} y={CHART_CAP_Y} />
       <Headline f={f} a={10.0} b={11.2} text={`蓝线：期货价格 ${RAW.forward_td}`} y={CHART_CAP_Y} />
-      <Headline f={f} a={11.2} b={12.8} text="柱子：持仓量" sub="绿 = 看跌　红 = 看涨" y={CHART_CAP_Y} />
-      <Headline f={f} a={12.8} b={14.3} text="C / P：真实的买卖报价" y={CHART_CAP_Y} />
+      <Headline f={f} a={11.2} b={12.8} text="柱子：持仓量" sub={`最大：${OI_TOP.k} ${OI_TOP.side} ${fmtInt(OI_TOP.v)} 手`} y={CHART_CAP_Y} />
+      <Headline f={f} a={12.8} b={14.3} text="C / P：真实的买卖报价" sub={Q_BID != null && Q_ASK != null ? `${Q_K} 看涨：${fmt(Q_BID)}% / ${fmt(Q_ASK)}%` : undefined} y={CHART_CAP_Y} />
       <Headline f={f} a={14.4} b={15.9} text="但这只是一个到期月。" y={CHART_CAP_Y} />
 
       {/* 3 · lift */}
@@ -349,8 +445,10 @@ export const OpenVlabSurfVideo: React.FC = () => {
       <Headline f={f} a={25.2} b={28.0} text="高度和颜色：隐波" />
       {(() => {
         const p = fadeWin(f, 25.4, 28.0, 0.4);
-        return p > 0 ? <div style={{ position: "absolute", left: W / 2 - 220, top: 1010, width: 440, height: 6, borderRadius: 3, background: createLegendGradient(VOLATILITY_STOPS, "to right"), opacity: p, clipPath: `inset(0 ${(1 - prog(f, 23.6, 24.6)) * 100}% 0 0 round 3px)` }} /> : null;
+        return p > 0 ? <div style={{ position: "absolute", left: W / 2 - 220, top: 1010, width: 440, height: 6, borderRadius: 3, background: createLegendGradient(VOLATILITY_STOPS, "to right"), opacity: p, clipPath: `inset(0 ${(1 - prog(f, 25.6, 26.6)) * 100}% 0 0 round 3px)` }} /> : null;
       })()}
+
+      <AxesDemo f={f} proj={proj} />
 
       {/* 5 · worked example: hover the surface like in the product */}
       {hoverO > 0 && slice ? (

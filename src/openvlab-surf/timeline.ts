@@ -36,7 +36,7 @@ const slow = Easing.bezier(0.45, 0, 0.2, 1);
  * Every move is motivated by the caption on screen. All views stay on the same side of the surface
  * (strike low → high reads left → right like the 2D chart).
  */
-export const cameraKeys = (nearZ: number, colX: number, peak: THREE.Vector3): Key[] => [
+export const cameraKeys = (nearZ: number, colX: number, peak: THREE.Vector3, atmX = 0): Key[] => [
   // hook: macro on the near-month 6000 ridge, slow push-in
   // (looking back along the near-month smile from behind it: the ridge sweeps across the frame up to the 6000 peak)
   { t: 0, theta: 158, phi: 13, r: 1.45, target: [peak.x + 0.75, peak.y - 0.3, peak.z + 0.1], fov: 32 },
@@ -48,9 +48,14 @@ export const cameraKeys = (nearZ: number, colX: number, peak: THREE.Vector3): Ke
   { t: 19.0, theta: -28, phi: 30, r: 3.3, target: [0, 0.25, 0], fov: 42, ease: slow },
   // axes (v7 framing, retimed): one eased orbit from the unroll's end pose round to the near/front side –
   // strike labels along the front edge (9800 … 6000, put wing rising at right) –, then expiry side-on, then IV
-  { t: 22.1, theta: -170, phi: 22, r: 2.7, target: [0, 0.14, -0.6], ease: slow },
-  { t: 25.0, theta: -106, phi: 22, r: 2.8, target: [-0.6, 0.14, 0], ease: slow },
-  { t: 28.0, theta: -140, phi: 14, r: 3.0, target: [-0.3, 0.42, -0.3], ease: slow },
+  // strike: settle on the front, then dolly along the near-month row from ATM toward 6000 (the upturn)
+  { t: 20.4, theta: -166, phi: 20, r: 2.6, target: [atmX, 0.3, nearZ * 0.75], ease: slow },
+  { t: 22.1, theta: -172, phi: 16, r: 2.4, target: [colX * 0.45, peak.y - 0.14, nearZ * 0.8], ease: slow },
+  // expiry: follow the pin down the 6000 column (near → far), side-on so depth reads
+  { t: 23.6, theta: -128, phi: 20, r: 2.5, target: [colX * 0.85, 0.3, nearZ * 0.1], ease: slow },
+  { t: 25.0, theta: -106, phi: 22, r: 2.7, target: [colX * 0.7, 0.24, -nearZ * 0.7], ease: slow },
+  // IV: crane up over the surface; the maximum (31d / 6000) and the ruler read as height
+  { t: 28.0, theta: -150, phi: 40, r: 3.0, target: [-0.3, 0.1, -0.3], ease: slow },
   // example: overview (room for the two slice panels), push in on 6000 / near month, follow the cursor to the far month, pull back
   { t: 30.4, theta: -30, phi: 26, r: 3.4, target: [colX * 0.3, 0.45, 0], ease: slow },
   { t: 33.2, theta: -32, phi: 22, r: 2.4, target: [colX * 0.85, peak.y - 0.18, nearZ * 0.6], ease: slow },
