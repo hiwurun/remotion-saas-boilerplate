@@ -1,11 +1,12 @@
-import { Easing, interpolate } from "remotion";
+import { interpolate } from "remotion";
+import { CLAMP, EASE, EASE_OUT } from "../shared/motion";
+import { isUrl, withAlpha } from "../shared/utils";
 
-export const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+export { CLAMP, EASE, EASE_OUT, isUrl, withAlpha };
+
 export const LAUNCH_FPS = 60;
 
 /** Heavy in-out: leaves fast, settles slowly. */
-export const EASE = Easing.bezier(0.7, 0, 0.12, 1);
-export const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
 
 export const C = {
   bg: "#FFFFFF",
@@ -43,14 +44,7 @@ export const SHOTS = {
 
 export const TOTAL_BEATS = SHOTS.end;
 
-export const withAlpha = (hex: string, a: number) => {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
-  const n = parseInt(full, 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-};
 
-export const isUrl = (s: string) => /^https?:\/\//.test(s);
 
 export type Step = { action: "type" | "delete" | "wait"; text?: string; framesPerChar?: number; frames?: number };
 

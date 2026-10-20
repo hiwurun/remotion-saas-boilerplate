@@ -1,5 +1,5 @@
 import React from "react";
-import { SlotReel } from "./SlotReel";
+import { SlotReel } from "../../shared/components/SlotReel";
 import { BrandMark } from "./BrandMark";
 import { C } from "../theme";
 

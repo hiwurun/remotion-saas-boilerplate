@@ -1,6 +1,6 @@
 import React from "react";
 import { EasingFunction, interpolate } from "remotion";
-import { CLAMP, EASE } from "../theme";
+import { CLAMP, EASE } from "../motion";
 
 export type CameraKeyframe = { frame: number; x: number; y: number; scale: number; easing?: EasingFunction };
 export type CameraState = { x: number; y: number; scale: number };

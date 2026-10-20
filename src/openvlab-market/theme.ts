@@ -1,16 +1,17 @@
-import { Easing, interpolate } from "remotion";
+import { interpolate } from "remotion";
+import { CLAMP, EASE, EASE_OUT } from "../shared/motion";
+import { isUrl, withAlpha } from "../shared/utils";
+
+export { CLAMP, EASE, EASE_OUT, isUrl, withAlpha };
 
 /**
  * Beat-timing helpers copied from src/launch/theme.ts (same easing / beat maths),
  * re-skinned with OpenVLab dark-theme tokens taken from
  * vlab-frontend/packages/ui/src/globals.css (.dark block) and the real market page.
  */
-export const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 export const OV_FPS = 60;
 
 /** Heavy in-out: leaves fast, settles slowly. */
-export const EASE = Easing.bezier(0.7, 0, 0.12, 1);
-export const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
 /** CSS blur only while it is visible – blur(0px) still forces a filter layer (render cost). */
 export const blurOf = (px: number) => (px > 0.05 ? `blur(${px.toFixed(2)}px)` : undefined);
 
@@ -117,14 +118,7 @@ const storyBeatBase = (s: number) => {
 /** story-grid length; the real timeline is storyBeat(TOTAL_BEATS) = 129.6 beats (64.8 s) */
 export const TOTAL_BEATS = 120;
 
-export const withAlpha = (hex: string, a: number) => {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
-  const n = parseInt(full, 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-};
 
-export const isUrl = (s: string) => /^https?:\/\//.test(s);
 
 export type Step = { action: "type" | "delete" | "wait"; text?: string; framesPerChar?: number; frames?: number };
 

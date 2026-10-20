@@ -1,6 +1,6 @@
 import React from "react";
 import { C, withAlpha } from "../theme";
-import { SlotReel } from "./SlotReel";
+import { SlotReel } from "../../shared/components/SlotReel";
 
 /** Slot-reel of data-derived stat lines inside a dark pill (launch grid prompt-bar mechanic). */
 export const StatReel: React.FC<{ cx: number; cy: number; width: number; items: string[]; position: number; velocity: number; opacity: number; font: string; accent: string; fontSize?: number }> = ({ cx, cy, width, items, position, velocity, opacity, font, accent, fontSize = 40 }) => {

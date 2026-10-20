@@ -1,5 +1,5 @@
 import React from "react";
-import { SlotReel } from "./SlotReel";
+import { SlotReel } from "../../shared/components/SlotReel";
 
 /** Width of the text field inside a fully expanded bar (used to compute the scroll offset). */
 export const getFieldWidth = (width: number, height: number) => {
