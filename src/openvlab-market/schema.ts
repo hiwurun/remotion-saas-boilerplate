@@ -64,7 +64,7 @@ export const OpenVLabSchema = z.object({
 export type OpenVLabProps = z.infer<typeof OpenVLabSchema>;
 
 export const OPENVLAB_DEFAULTS: OpenVLabProps = {
-  brandName: "OpenVLab",
+  brandName: "OpenVlab",
   url: "openvlab.cn",
   tagline: "一个页面 发掘市场机会",
   logoSrc: "openvlab-market/logo.svg",
