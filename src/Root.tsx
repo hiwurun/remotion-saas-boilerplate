@@ -7,6 +7,8 @@ import { LaunchVideo, calculateLaunchMetadata } from "./launch/LaunchVideo";
 import { LaunchVideoSchema } from "./launch/schema";
 import { OpenVLabVideo, calculateOpenVLabMetadata } from "./openvlab-market/OpenVLabVideo";
 import { OPENVLAB_DEFAULTS, OpenVLabSchema } from "./openvlab-market/schema";
+import { OpenVlabSurfVideo } from "./openvlab-surf/OpenVlabSurfVideo";
+import { FPS as SURF_FPS, H as SURF_H, TOTAL as SURF_TOTAL, W as SURF_W } from "./openvlab-surf/timeline";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -178,6 +180,7 @@ export const RemotionRoot: React.FC = () => {
         calculateMetadata={calculateOpenVLabMetadata}
         defaultProps={OPENVLAB_DEFAULTS}
       />
+      <Composition id="openvlab-surf" component={OpenVlabSurfVideo} width={SURF_W} height={SURF_H} fps={SURF_FPS} durationInFrames={SURF_TOTAL} />
     </>
   );
 };

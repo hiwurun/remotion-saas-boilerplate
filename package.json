@@ -8,6 +8,7 @@
     "build": "remotion bundle",
     "render:landscape": "remotion render Lumina-Landscape out/lumina-landscape.mp4",
     "render:portrait": "remotion render Lumina-Portrait out/lumina-portrait.mp4",
+    "render:surf": "remotion render openvlab-surf out/openvlab-surf.mp4 --gl=angle",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@remotion/zod-types": "4.0.535",
     "@types/three": "^0.170.0",
     "clsx": "^2.1.1",
+    "echarts": "6.1.0",
     "gsap": "^3.15.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
