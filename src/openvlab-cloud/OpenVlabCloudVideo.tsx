@@ -400,6 +400,23 @@ const CardStream: React.FC<{ t: number }> = ({ t }) => {
 const Caret: React.FC<{ o: number }> = ({ o }) => (
   <span style={{ display: "inline-block", width: 0, height: 50, position: "relative" }}><span style={{ position: "absolute", left: 10, top: 0, width: 26, height: 50, background: WHITE, opacity: o }} /></span>
 );
+/* ---------------- shot 2 → 3: the market card turns away like a page (hinge on the left edge), revealing the title beneath ---------------- */
+const FLIP = { t0: 8.78, t1: 9.4 };
+const PageTurn: React.FC<{ t: number }> = ({ t }) => {
+  const x = Math.max(0, Math.min(1, (t - FLIP.t0) / (FLIP.t1 - FLIP.t0)));
+  const e = x * x * (2.2 - 1.2 * x); // lifts gently, then accelerates through the turn
+  const ang = 100 * e;
+  if (x >= 1 || ang >= 90) return null; // edge-on → gone (no back face); title is already flat underneath
+  return (
+    <AbsoluteFill style={{ perspective: 2200, perspectiveOrigin: "0% 50%" }}>
+      <AbsoluteFill style={{ transformOrigin: "0% 50%", transform: `rotateY(${ang}deg)`, backfaceVisibility: "hidden", background: "#000", willChange: "transform" }}>
+        {/* page = the last frame of the market shot (camera is locked from 8s) */}
+        <CardLayer c={MARKET_CARD} cam={pullCam(8)} t={FLIP.t0} idx={0} o={{ cardOp: 1, titleOp: 1, exitOp: 1 }} />
+        <AbsoluteFill style={{ background: "#000", opacity: 0.65 * e }} />
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
 const Typed: React.FC<{ text: string; t: number; t0: number; cps: number; soft?: boolean }> = ({ text, t, t0, cps, soft }) => {
   const n = Math.min(text.length, Math.floor((t - t0) * cps) + 1);
   const on = n < text.length || Math.floor((t - t0) * 2.4) % 2 === 0;
@@ -424,7 +441,12 @@ export const OpenVlabCloudVideo: React.FC = () => {
   let body: React.ReactNode = null;
   if (t < S.s3) body = <CardLayer c={MARKET_CARD} cam={pullCam(t)} t={t} idx={0} o={{ cardOp: smooth(t, 3.9, 5.4), titleOp: smooth(t, 4.2, 5.2), exitOp: smooth(t, 4.8, 6.0) }} />;
   else if (t < S.s4)
-    body = <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}><div style={{ fontFamily: MONO, fontSize: 46, color: WHITE, letterSpacing: 8 }}>一屏看完全市场隐波</div></AbsoluteFill>;
+    body = (
+      <AbsoluteFill>
+        <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}><div style={{ fontFamily: MONO, fontSize: 46, color: WHITE, letterSpacing: 8 }}>一屏看完全市场隐波</div></AbsoluteFill>
+        <PageTurn t={t} />
+      </AbsoluteFill>
+    );
   else if (t < S.s5) body = <CardStream t={t} />;
   else if (t < T.s6) body = <ShotFall t={t} />;
   else if (t < T.s7) body = <AbsoluteFill style={{ opacity: 1 - smooth(t, T.s7 - 0.5, T.s7) }}><ShotSpeed t={t} /></AbsoluteFill>;
