@@ -1,0 +1,46 @@
+{
+  "code": 0,
+  "result": {
+    "202706": {
+      "maturity": 0.660274,
+      "bid": 6366.0,
+      "ask": 6369.2,
+      "future_tday": 6367.6,
+      "future_yday": 6327.8,
+      "oi_tday": 12475.0,
+      "oi_yday": 12054.0,
+      "days_to_expiry": 240.0
+    },
+    "202612": {
+      "maturity": 0.161644,
+      "bid": 6703.0,
+      "ask": 6704.0,
+      "future_tday": 6703.5,
+      "future_yday": 6663.8,
+      "oi_tday": 261769.0,
+      "oi_yday": 280125.0,
+      "days_to_expiry": 58.0
+    },
+    "202703": {
+      "maturity": 0.410959,
+      "bid": 6538.0,
+      "ask": 6538.6,
+      "future_tday": 6538.3,
+      "future_yday": 6499.2,
+      "oi_tday": 99448.0,
+      "oi_yday": 102968.0,
+      "days_to_expiry": 149.0
+    },
+    "202611": {
+      "maturity": 0.0849315,
+      "bid": 6756.0,
+      "ask": 6757.4,
+      "future_tday": 6756.7,
+      "future_yday": 6717.8,
+      "oi_tday": 88464.0,
+      "oi_yday": 93462.0,
+      "days_to_expiry": 30.0
+    }
+  },
+  "message": "ok"
+}
