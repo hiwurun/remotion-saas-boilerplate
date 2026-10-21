@@ -52,11 +52,9 @@ const dot = (a: V3, b: V3) => a.x * b.x + a.y * b.y + a.z * b.z;
 const cross = (a: V3, b: V3): V3 => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 const len = (a: V3) => Math.sqrt(dot(a, a));
 const norm = (a: V3): V3 => { const l = len(a) || 1; return { x: a.x / l, y: a.y / l, z: a.z / l }; };
-const BINS = [0, 1.5, 4, 8, 14];
 /** depth cue without filters: brightness (opacity) + slight size falloff */
 const fo = (b: number) => 1 / (1 + 0.11 * b);
 const fs_ = (b: number) => Math.max(0.82, 1 - 0.012 * b);
-const bin = (b: number) => { let i = 0; while (i < BINS.length - 1 && b > (BINS[i] + BINS[i + 1]) / 2) i++; return i; };
 
 /* ---------------- flow-graph cards (local units, lie flat on y=0) ---------------- */
 const CW = 1400, CH = 820, TB = 430, MERGE = 960, EXIT = 1170;
@@ -104,6 +102,65 @@ const pathPt = (l: number, n: number, u: number) => {
 };
 
 type LayerOpts = { cardOp?: number; titleOp?: number; exitOp?: number };
+/** plane-space flow-line samples are constant per card: build once */
+const GEO = new Map<string, { lines: { a: number; b: number; g: number }[][]; trunk: { a: number; b: number; g: number }[] }>();
+const lineGeo = (c: CardDef) => {
+  let g = GEO.get(c.id);
+  if (!g) {
+    const n = c.lines.length, tEnd = c.grid ? GX0 - 8 : EXIT - 40;
+    g = {
+      lines: Array.from({ length: n }, (_, l) => Array.from({ length: 41 }, (_, i) => ({ ...pathPt(l, n, (i / 40) * 0.8), g: (i / 40) ** 1.5 * 0.85 }))),
+      trunk: Array.from({ length: 21 }, (_, i) => ({ a: MERGE + ((tEnd - MERGE) * i) / 20, b: TB, g: 1 })),
+    };
+    GEO.set(c.id, g);
+  }
+  return g;
+};
+/** static market-grid tiles (84 × rect/rect/text/text): memoized so per-frame camera changes only touch the parent transform */
+const GridTiles = React.memo(({ pad, gap, part }: { pad: number; gap: number; part: "bg" | "text" }) => {
+  const cw = (GX1 - GX0) / GC, ch = (GY1 - GY0) / GR;
+  return (
+    <>
+      {GRID_CELLS.map((g, i) => {
+        const x = pad + (i % GC) * cw + gap / 2, y = pad + Math.floor(i / GC) * ch + gap / 2, w = cw - gap, h = ch - gap;
+        if (part === "bg") {
+          const k = Number.isFinite(g.d) ? Math.pow(Math.min(1, Math.abs(g.d) / 3), 0.7) : 0;
+          const tint = !Number.isFinite(g.d) || g.d === 0 ? "#ffffff" : g.d > 0 ? "#ff5a64" : "#2fd88f";
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={w} height={h} rx={5} fill="#ffffff" fillOpacity={0.025} />
+              <rect x={x} y={y} width={w} height={h} rx={5} fill={tint} fillOpacity={k ? 0.04 + 0.16 * k : 0} />
+            </g>
+          );
+        }
+        const units = [...g.name].reduce((n, c2) => n + (/[\u3000-\u9fff]/.test(c2) ? 1 : 0.62), 0);
+        const fs = 12 * Math.min(1, 4.4 / units);
+        return (
+          <g key={i}>
+            <text x={x + w / 2} y={y + h * 0.46} textAnchor="middle" fontFamily={SANS} fontWeight={500} fontSize={fs} fill="#f4f5f7" fillOpacity={0.94}>{g.name}</text>
+            {Number.isFinite(g.v) ? <text x={x + w / 2} y={y + h * 0.46 + 15} textAnchor="middle" fontFamily={MONO} fontSize={10.5} fill="#ffffff" fillOpacity={0.5} style={{ fontVariantNumeric: "tabular-nums" }}>{(g.v as number).toFixed(2)}</text> : null}
+          </g>
+        );
+      })}
+    </>
+  );
+});
+type Aff = [number, number, number, number, number, number];
+const mulAff = (p: Aff, q: Aff): Aff => [p[0] * q[0] + p[2] * q[1], p[1] * q[0] + p[3] * q[1], p[0] * q[2] + p[2] * q[3], p[1] * q[2] + p[3] * q[3], p[0] * q[4] + p[2] * q[5] + p[4], p[1] * q[4] + p[3] * q[5] + p[5]];
+const invAff = ([a, b, c, d, e, f]: Aff): Aff => { const k = a * d - b * c; return [d / k, -b / k, -c / k, a / k, (c * f - d * e) / k, (b * e - a * f) / k]; };
+let GRID_END: Aff | null = null;
+const gridEnd = (f: () => Aff) => (GRID_END ??= f());
+const GridPanel = React.memo(({ m, bw, bh, pad, idx, exitQ }: { m: string; bw: number; bh: number; pad: number; idx: number; exitQ: number }) => (
+  <svg width={W} height={H} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+    <g transform={`matrix(${m})`}>
+      <defs><linearGradient id={`gp${idx}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#17181b" /><stop offset="1" stopColor="#0e0f11" /></linearGradient></defs>
+      <rect width={bw} height={bh} rx={14} fill={`url(#gp${idx})`} stroke="#ffffff" strokeOpacity={0.1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      <line x1={14} x2={bw - 14} y1={0.75} y2={0.75} stroke="#ffffff" strokeOpacity={0.12} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      <GridTiles pad={pad} gap={1.5} part="bg" />
+      <g opacity={exitQ}><GridTiles pad={pad} gap={1.5} part="text" /></g>
+    </g>
+  </svg>
+));
 const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx: number; o?: LayerOpts }> = ({ c, cam, t, enter = 1, idx, o = {} }) => {
   const { cardOp = 1, titleOp = 1, exitOp = 1 } = o;
   const P = mkProj(cam);
@@ -129,48 +186,35 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
       const g = run.reduce((a, p) => a + p.g, 0) / run.length;
       const sw = Math.max(1.6, Math.min(w, (w * run.reduce((a, p) => a + p.s, 0)) / run.length));
       const d = run.map((p, j) => `${j ? "L" : "M"}${p.X.toFixed(1)},${p.Y.toFixed(1)}`).join("");
-      const alpha = (0.3 + 0.7 * g) * (1 - smooth(blur, 6, 16) * 0.6);
-      push(bin(blur), <g key={`${key}-${ri++}`}><path d={d} fill="none" stroke="#ffffff" strokeOpacity={0.07 * alpha} strokeWidth={sw * 3} strokeLinecap="round" /><path d={d} fill="none" stroke="#ffffff" strokeOpacity={alpha} strokeWidth={sw} strokeLinecap="round" /></g>);
+      const alpha = (0.3 + 0.7 * g) * (1 - smooth(blur, 6, 16) * 0.6) * fo(blur); // continuous depth cue (no bin steps / regrouping)
+      push(0, <g key={`${key}-${ri++}`}><path d={d} fill="none" stroke="#ffffff" strokeOpacity={0.07 * alpha} strokeWidth={sw * 3} strokeLinecap="round" /><path d={d} fill="none" stroke="#ffffff" strokeOpacity={alpha} strokeWidth={sw} strokeLinecap="round" /></g>);
     }
   };
-  for (let l = 0; l < n; l++) drawPath(Array.from({ length: 41 }, (_, i) => ({ ...pathPt(l, n, (i / 40) * 0.8), g: (i / 40) ** 1.5 * 0.85 })), 2.4, `l${l}`);
-  const tEnd = c.grid ? GX0 - 8 : EXIT - 40;
-  drawPath(Array.from({ length: 21 }, (_, i) => ({ a: MERGE + ((tEnd - MERGE) * i) / 20, b: TB, g: 1 })), 4, "trunk");
-  if (c.grid && cardOp > 0.01) {
+  const geo = lineGeo(c);
+  geo.lines.forEach((pts, l) => drawPath(pts, 2.4, `l${l}`));
+  drawPath(geo.trunk, 4, "trunk");
+  let gridNode: React.ReactNode = null;
+  if (c.grid) {
+    // always mounted (opacity 0 before it fades in): mounting 84 tiles + text on the fade-in frame (~3.99s) caused a one-frame hitch
     // refined minimal grid: one panel (single vertical gradient, hairline edge) + flat tiles with hairline gaps; text in the same affine group → pixel-aligned
-    const aff = (a0: number, b0: number, w: number, h: number) => {
-      const o = P(W3(a0, b0)), u = P(W3(a0 + w, b0)), v = P(W3(a0, b0 + h));
-      if ([o, u, v].some((pp) => pp.z < 20)) return null;
-      return { m: `matrix(${(u.X - o.X) / w},${(u.Y - o.Y) / w},${(v.X - o.X) / h},${(v.Y - o.Y) / h},${o.X},${o.Y})`, blur: P(W3(a0 + w / 2, b0 + h / 2)).blur };
-    };
     const pad = 8, bw = GX1 - GX0 + 2 * pad, bh = GY1 - GY0 + 2 * pad;
-    const box = aff(GX0 - pad, GY0 - pad, bw, bh);
-    if (box) {
-      const cw = (GX1 - GX0) / GC, ch = (GY1 - GY0) / GR, gap = 1.5;
-      push(bin(box.blur), (
-        <g key="grid" transform={box.m} opacity={cardOp}>
-          <defs><linearGradient id={`gp${idx}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#17181b" /><stop offset="1" stopColor="#0e0f11" /></linearGradient></defs>
-          <rect width={bw} height={bh} rx={14} fill={`url(#gp${idx})`} stroke="#ffffff" strokeOpacity={0.1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
-          <line x1={14} x2={bw - 14} y1={0.75} y2={0.75} stroke="#ffffff" strokeOpacity={0.12} strokeWidth={1} vectorEffect="non-scaling-stroke" />
-          {GRID_CELLS.map((g, i) => {
-            const x = pad + (i % GC) * cw + gap / 2, y = pad + Math.floor(i / GC) * ch + gap / 2, w = cw - gap, h = ch - gap;
-            const k = Number.isFinite(g.d) ? Math.pow(Math.min(1, Math.abs(g.d) / 3), 0.7) : 0;
-            const tint = !Number.isFinite(g.d) || g.d === 0 ? "#ffffff" : g.d > 0 ? "#ff5a64" : "#2fd88f";
-            const units = [...g.name].reduce((n, c2) => n + (/[\u3000-\u9fff]/.test(c2) ? 1 : 0.62), 0);
-            const fs = 12 * Math.min(1, 4.4 / units);
-            return (
-              <g key={i}>
-                <rect x={x} y={y} width={w} height={h} rx={5} fill="#ffffff" fillOpacity={0.025} />
-                <rect x={x} y={y} width={w} height={h} rx={5} fill={tint} fillOpacity={k ? 0.04 + 0.16 * k : 0} />
-                <g opacity={exitOp}>
-                  <text x={x + w / 2} y={y + h * 0.46} textAnchor="middle" fontFamily={SANS} fontWeight={500} fontSize={fs} fill="#f4f5f7" fillOpacity={0.94}>{g.name}</text>
-                  {Number.isFinite(g.v) ? <text x={x + w / 2} y={y + h * 0.46 + 15} textAnchor="middle" fontFamily={MONO} fontSize={10.5} fill="#ffffff" fillOpacity={0.5} style={{ fontVariantNumeric: "tabular-nums" }}>{(g.v as number).toFixed(2)}</text> : null}
-                </g>
-              </g>
-            );
-          })}
-        </g>
-      ));
+    const affM = (PP: typeof P): Aff | null => {
+      const o = PP(W3(GX0 - pad, GY0 - pad)), u = PP(W3(GX0 - pad + bw, GY0 - pad)), v = PP(W3(GX0 - pad, GY0 - pad + bh));
+      if ([o, u, v].some((pp) => pp.z < 20)) return null;
+      return [(u.X - o.X) / bw, (u.Y - o.Y) / bw, (v.X - o.X) / bh, (v.Y - o.Y) / bh, o.X, o.Y];
+    };
+    const m = affM(P);
+    const mEnd = gridEnd(() => affM(mkProj(pullCam(8)))!);
+    if (m) {
+      // the grid is rasterised once at its final (top-down) screen geometry in its own GPU layer; each frame only the layer's
+      // 2D transform (current affine ∘ final⁻¹) changes, so 84 tiles of text are not re-rasterised on every frame of the rotation
+      const rel = mulAff(m, invAff(mEnd));
+      const blur = P(W3(GX0 - pad + bw / 2, GY0 - pad + bh / 2)).blur;
+      gridNode = (
+        <div key="grid" style={{ position: "absolute", left: 0, top: 0, width: W, height: H, transformOrigin: "0 0", willChange: "transform", transform: `matrix(${rel.join(",")})`, opacity: cardOp * fo(blur), display: cardOp < 0.004 ? "none" : undefined }}>
+          <GridPanel m={mEnd.join(",")} bw={bw} bh={bh} pad={pad} idx={idx} exitQ={Math.round(exitOp * 40) / 40} />
+        </div>
+      );
     }
   }
 
@@ -241,8 +285,9 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
   return (
     <AbsoluteFill style={{ opacity: op }}>
       <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
-        {BINS.map((b, i) => (bins[i] ? <g key={i} opacity={fo(b)}>{bins[i]}</g> : null))}
+        <g>{bins[0]}</g>
       </svg>
+      {gridNode}
       {divs}
     </AbsoluteFill>
   );
@@ -391,7 +436,13 @@ export const OpenVlabCloudVideo: React.FC = () => {
       </AbsoluteFill>
     );
   return (
-    <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
+    <AbsoluteFill
+      style={{
+        background: "#000",
+        overflow: "hidden",
+        scale: 1.005
+      }}
+    >
       <Audio src={staticFile(BGM)} volume={(f) => interpolate(f, [0, 0.8 * FPS, TOTAL - 1.6 * FPS, TOTAL - 1], [0, 0.8, 0.8, 0], CLAMP)} />
       {body}
     </AbsoluteFill>
