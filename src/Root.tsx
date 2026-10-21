@@ -1,6 +1,6 @@
 import "./index.css";
 import React from "react";
-import { Composition } from "remotion";
+import { Composition, Still } from "remotion";
 import { LuminaSlider, calculateLuminaMetadata } from "./lumina/LuminaSlider";
 import { LuminaVideoSchema } from "./lumina/schema";
 import { LaunchVideo, calculateLaunchMetadata } from "./launch/LaunchVideo";
@@ -8,6 +8,7 @@ import { LaunchVideoSchema } from "./launch/schema";
 import { OpenVLabVideo, calculateOpenVLabMetadata } from "./openvlab-market/OpenVLabVideo";
 import { OPENVLAB_DEFAULTS, OpenVLabSchema } from "./openvlab-market/schema";
 import { OpenVlabSurfVideo } from "./openvlab-surf/OpenVlabSurfVideo";
+import { OpenVlabSurfCover } from "./openvlab-surf/Cover";
 import { FPS as SURF_FPS, H as SURF_H, TOTAL as SURF_TOTAL, W as SURF_W } from "./openvlab-surf/timeline";
 
 export const RemotionRoot: React.FC = () => {
@@ -181,6 +182,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={OPENVLAB_DEFAULTS}
       />
       <Composition id="openvlab-surf" component={OpenVlabSurfVideo} width={SURF_W} height={SURF_H} fps={SURF_FPS} durationInFrames={SURF_TOTAL} />
+      <Still id="openvlab-surf-cover" component={OpenVlabSurfCover} width={1920} height={1080} />
     </>
   );
 };
