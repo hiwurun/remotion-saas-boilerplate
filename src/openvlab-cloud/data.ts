@@ -56,9 +56,10 @@ const parseArr = (s: unknown): number[] => {
 const num = (v: unknown): number => (v === null || v === undefined || v === "" ? NaN : Number(v));
 
 type RawProduct = { ctn?: unknown; frontfwd_mom?: unknown; exp?: unknown; is_overseas?: unknown; exps?: Record<string, Record<string, unknown>> };
-const result = (raw as unknown as { result: Record<string, RawProduct> }).result;
-
-export const PRODUCTS: Product[] = ALIAS.filter(([c]) => result[c]).map(([code, name, sector]) => {
+/** parse a /api/surfacemap-shaped JSON ({result:{[code]:{exps:{...}}}}) into products (same rules for every snapshot) */
+export const parseProducts = (src: unknown): Product[] => {
+  const result = (src as { result: Record<string, RawProduct> }).result;
+  return ALIAS.filter(([c]) => result[c]).map(([code, name, sector]) => {
   const p = result[code];
   const exps = p.exps ?? {};
   const months = Object.keys(exps).sort().map((k) => {
@@ -74,7 +75,9 @@ export const PRODUCTS: Product[] = ALIAS.filter(([c]) => result[c]).map(([code, 
     code, name, sector, ctn: num(p.ctn), ffmom: num(p.frontfwd_mom), exp: String(p.exp ?? ""),
     overseas: Number(p.is_overseas) === 1, months,
   };
-});
+  });
+};
+export const PRODUCTS: Product[] = parseProducts(raw);
 
 const allT = PRODUCTS.flatMap((p) => p.months.flatMap((m) => m.tday)).filter(Number.isFinite);
 export const TDAY_AVG = allT.reduce((a, b) => a + b, 0) / Math.max(1, allT.length);

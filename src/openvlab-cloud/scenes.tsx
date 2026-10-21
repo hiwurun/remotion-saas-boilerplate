@@ -3,14 +3,18 @@ import { AbsoluteFill } from "remotion";
 import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
 import { SANS } from "../shared/fonts";
 import { Card, Mode, Reveal, StaticCard } from "./Card";
-import { CARD_H, cellCenter, GRID, L, Placed } from "./data";
+import { CARD_H, cardW, cellCenter, GRID, L, parseProducts, Placed } from "./data";
 import { D, withA } from "./styles";
+import * as echarts from "echarts";
+import { buildVolChartOption, DARK, type RawExpiry } from "../openvlab-surf/model/vol-chart";
+import imSurfaceClose from "./data/volatility-surface-IM-close.json";
+import cloudClose from "./data/surfacemap-close.json";
 
 /** Shots 5–13 of the 58s cut. Every value drawn comes from data/*.json. */
 export const W = 1920, H = 1080;
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", monospace`;
-export const T = { s5: 15.44, s6: 19.41, s7: 23.36 };
+export const T = { s5: 15.44, s6: 19.41, s7: 28.77 };
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const sm = (t: number, a: number, b: number) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
@@ -61,10 +65,6 @@ const mainM = (p: Placed["p"]) => p.months.find((m) => m.exp === p.exp) ?? p.mon
 const FALL_DIFF = GRID.map((g) => mainM(g.p)?.diff[3]).filter((v): v is number => Number.isFinite(v));
 const FALLING = new Set(GRID.filter((g) => (mainM(g.p)?.diff[3] ?? 0) < 0).map((g) => g.p.code));
 const N_ALL = FALL_DIFF.length;
-type Hot = { g: Placed; mi: number; row: number; a: number };
-const HOT: Hot[] = GRID.flatMap((g) => g.p.months.flatMap((m, mi) => m.alpha.map((a, j) => ({ g, mi, row: j + 1, a })))).filter((h) => Number.isFinite(h.a)).sort((x, y) => Math.abs(y.a) - Math.abs(x.a)).slice(0, 6);
-const TOP = HOT[0];
-const ROWNAME = ["偏度", "20P", "30P", "40P", "50", "40C", "30C", "20C"];
 /* ---------------- A · 哪些品种隐波下跌？ ---------------- */
 const FALL_LIST = GRID.filter((g) => FALLING.has(g.p.code)).map((g) => ({ code: g.p.code, name: g.p.name, d: mainM(g.p).diff[3] })).sort((a, b) => a.d - b.d);
 const FALL_T0 = 15.9, FALL_DT = 0.075; // item i lights at FALL_T0 + i * FALL_DT (≈ 2.4s for 32)
@@ -99,30 +99,149 @@ export const ShotFall: React.FC<{ t: number }> = ({ t }) => {
   );
 };
 
-/* ---------------- B · 哪里变化最快？(涨速边框) — single card ---------------- */
+/* ---------------- B · IM 2611: 7 cells → 2D smile (yesterday, then today) ---------------- */
+/** swap point for new data: the surface JSON (/api/volatility-surface/<product> shape, {result:{[exp]:{...}}}) + expiry */
+const SMILE_SRC: unknown = imSurfaceClose; // IM 2611 close snapshot (16:31:52)
+/** card for this shot: closing cloud-map snapshot (15:29) — same parser as the main wall */
+const CARD_SRC: unknown = cloudClose;
+const SMILE_EXP = "202611";
+const LH_P = parseProducts(CARD_SRC).find((p) => p.code === "MO")!;
+const LH: Placed = { p: LH_P, x: 0, y: 0, w: cardW(LH_P), idx: 0 }; // 中证1000期货 (IM), closing card
+const LH_M = LH.p.months[0];
+const SMILE_X = ["20P", "30P", "40P", "50", "40C", "30C", "20C"];
+/* IM 2611 surface (data/volatility-surface-IM.json = /api/volatility-surface/IM) */
+type LhE = Record<string, unknown>;
+const LH_E = (SMILE_SRC as { result: Record<string, LhE> }).result[SMILE_EXP];
+const jp = (v: unknown): unknown => (typeof v === "string" ? JSON.parse(v.replace(/NaN/g, "null")) : v);
+const prs = (k: string) => ((jp(LH_E[k]) as [number, number | string | null][]) ?? []).map(([a, b]) => [Number(a), b === "" || b == null ? NaN : Number(b)] as [number, number]).filter(([, b]) => Number.isFinite(b));
+const LH_RAW: RawExpiry = {
+  theovol_tday: prs("theovol_tday"), theovol_yday: prs("theovol_yday"),
+  mktvol_tday_call_bid: [], mktvol_tday_call_ask: [], mktvol_tday_put_bid: [], mktvol_tday_put_ask: [],
+  strike_poi_c: {}, strike_poi_p: {}, strike_oid_c: {}, strike_oid_p: {},
+  display_strike: [6200, 7300], // zoomed to the 7 delta strikes (file display range is 6000–7700)
+  forward_td: Number(LH_E.forward_td), forward_yd: Number(LH_E.forward_yd ?? (CARD_SRC as { result: Record<string, { exps: Record<string, { forward_yd?: string }> }> }).result.MO.exps[SMILE_EXP].forward_yd),
+  atmvol_tday: Number(LH_E.atmvol_tday), atmvol_yday: Number(LH_E.atmvol_yday),
+  days: Number(LH_E.days_to_expiry), expiry: "202611",
+};
+const lin = (pts: [number, number][], x: number) => {
+  for (let i = 0; i + 1 < pts.length; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if ((x - x0) * (x - x1) <= 0 && x1 !== x0) return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0); }
+  return NaN;
+};
+/** strike for each card row: put rows from delta_tday_put (−0.2/−0.3/−0.4), 50 from call 0.5, call rows from delta_tday_call (0.4/0.3/0.2); monotone segment only */
+const deltaPts = (k: string) => (k === "delta_tday_call" && LH_E.delta_tday_call == null ? prs("delta_tday_put").map(([x, d]) => [x, 1 + d] as [number, number]) : prs(k));
+const strikeAtDelta = (k: string, d: number) => {
+  const pts = deltaPts(k);
+  for (let i = pts.length - 2; i >= 0; i--) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if ((d - y0) * (d - y1) <= 0 && y1 !== y0) return x0 + ((x1 - x0) * (d - y0)) / (y1 - y0); }
+  return NaN;
+};
+const ROW_K = [strikeAtDelta("delta_tday_put", -0.2), strikeAtDelta("delta_tday_put", -0.3), strikeAtDelta("delta_tday_put", -0.4), strikeAtDelta("delta_tday_call", 0.5), strikeAtDelta("delta_tday_call", 0.4), strikeAtDelta("delta_tday_call", 0.3), strikeAtDelta("delta_tday_call", 0.2)];
+const CHW = 800, CHH = 560;
+const SMILE = (() => {
+  const opt = buildVolChartOption(LH_RAW, { today: 1, yday: 1, fwd: 1, oi: 0, quotes: 0 });
+  opt.series = opt.series.slice(0, 2); // no OI bars, no quote markers
+  opt.yAxis[1].show = false;
+  const inX = (pp: [number, number][]) => pp.filter(([k]) => k >= 6200 && k <= 7300).map(([, v]) => v);
+  const vs = [...inX(LH_RAW.theovol_tday), ...inX(LH_RAW.theovol_yday)];
+  opt.yAxis[0].min = Math.floor((Math.min(...vs) - 0.3) * 2) / 2;
+  opt.yAxis[0].max = Math.ceil((Math.max(...vs) + 0.3) * 2) / 2;
+  opt.yAxis[0].scale = false;
+  opt.yAxis[0].axisLabel = { ...opt.yAxis[0].axisLabel, formatter: (v: number) => `${v}%` };
+  opt.grid = { ...opt.grid, right: "24px", top: "44px" };
+  opt.legend.itemStyle = { opacity: 1 };
+  const layer = (show: "axes" | "yday" | "tday") => {
+    const o = JSON.parse(JSON.stringify(opt, (_k, v) => (typeof v === "function" ? undefined : v)));
+    o.yAxis[0].axisLabel.formatter = opt.yAxis[0].axisLabel.formatter;
+    o.legend.formatter = opt.legend.formatter;
+    const hideAxes = () => { o.legend.show = false; o.xAxis[0].axisLabel.show = false; o.yAxis[0].axisLabel.show = false; o.yAxis[0].name = ""; };
+    const off = (i: number) => { o.series[i].lineStyle.opacity = 0; o.series[i].showSymbol = false; }; // markers ride with their line
+    if (show === "axes") { off(0); off(1); }
+    if (show === "yday") { hideAxes(); off(0); delete o.series[0].markLine; }
+    if (show === "tday") { hideAxes(); off(1); delete o.series[0].markLine; }
+    const cc = echarts.init(null, undefined, { renderer: "svg", ssr: true, width: CHW, height: CHH });
+    cc.setOption(o);
+    const out = cc.renderToSVGString();
+    cc.dispose();
+    return out;
+  };
+  const c = echarts.init(null, undefined, { renderer: "svg", ssr: true, width: CHW, height: CHH });
+  c.setOption(opt);
+  const svg = { axes: layer("axes"), yday: layer("yday"), tday: layer("tday") };
+  const px = (k: number, v: number) => c.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [k, v]) as unknown as [number, number];
+  const pts = ROW_K.map((k) => {
+    const vt = lin(LH_RAW.theovol_tday, k), vy = lin(LH_RAW.theovol_yday, k);
+    return { k, vt, vy, t: px(k, vt), y: Number.isFinite(vy) ? px(k, vy) : null };
+  });
+  c.dispose();
+  return { svg, pts };
+})();
+const braceD = (p: { t: [number, number]; y: [number, number] | null }) => (p.y ? Math.min(10, Math.max(6, Math.abs(p.y[1] - p.t[1]) * 0.45)) : 0);
+const brace = (x: number, y1: number, y2: number, d = 9) => {
+  const ym = (y1 + y2) / 2;
+  if (Math.abs(y2 - y1) < 16) { y1 = ym - 8; y2 = ym + 8; } // minimum visual size
+  return `M${x},${y1} C${x - d},${y1} ${x},${ym} ${x - d},${ym} C${x},${ym} ${x - d},${y2} ${x},${y2}`;
+};
 export const ShotSpeed: React.FC<{ t: number }> = ({ t }) => {
-  const pl: Placed = { ...TOP.g, x: 0, y: 0 };
-  const sc = Math.min(1150 / pl.w, 640 / CARD_H);
-  const enter = io(t, T.s6, T.s6 + 0.8);
-  const push = sm(t, T.s6, T.s7);
-  const on = sm(t, 20.6, 21.2);
-  const isTop = (mi: number, row: number) => mi === TOP.mi && row === TOP.row;
-  const reveal: Reveal = { cell: (mi, row) => (isTop(mi, row) ? 1 : 1 - 0.65 * on), outline: (mi, row) => (isTop(mi, row) ? on : 0) };
-  const c = cellCenter(pl, TOP.mi, TOP.row);
-  const lab = sm(t, 21.3, 21.8);
-  const S = sc * lerp(0.96, 1, enter) * lerp(1, 1.05, push);
+  const t0 = T.s6;
+  const pl: Placed = { ...LH, x: 0, y: 0 };
+  const enter = io(t, t0, t0 + 0.8);
+  const slide = io(t, t0 + 2.55, t0 + 3.4);
+  const sc0 = Math.min(1150 / pl.w, 600 / CARD_H), sc1 = Math.min(560 / pl.w, 560 / CARD_H);
+  const S = lerp(sc0 * lerp(0.96, 1, enter), sc1, slide);
+  const ccx = lerp(W / 2, 400, slide), ccy = H / 2;
+  const hiAt = (row: number) => t0 + 0.95 + (row - 1) * 0.22; // 20P..20C one by one
+  const lit = (row: number) => sm(t, hiAt(row), hiAt(row) + 0.18);
+  const reveal: Reveal = { cell: (mi, row) => (mi === 0 && row > 0 ? 0.35 + 0.65 * lit(row) : 1 - 0.8 * sm(t, t0 + 0.9, t0 + 1.3)), outline: () => 0 };
+  // chart panel (right)
+  const PS = 1.28, PX = W - 60 - (CHW + 2) * PS, PY = (H - (CHH + 70) * PS) / 2;
+  const chartIn = io(t, t0 + 2.9, t0 + 3.6);
+  const drawY = io(t, t0 + 3.4, t0 + 4.2), drawT = io(t, t0 + 4.2, t0 + 5.0);
+  const braceAt = (i: number) => t0 + 5.0 + i * 0.09;
+  const lineAt = (i: number) => t0 + 5.4 + i * 0.29;
+  const cellScreen = (row: number) => { const c = cellCenter(pl, 0, row); return { x: ccx + (c.x + L.col / 2 - pl.w / 2) * S, y: ccy + (c.y - CARD_H / 2) * S }; }; // start at the 2611 cell's right edge
+  const conn = SMILE.pts.map((p, i) => {
+    const a = cellScreen(i + 1);
+    const bx = PX + PS * (1 + p.t[0] - (p.y ? 10 + braceD(p) : 8)), by = PY + PS * (58 + (p.y ? (p.t[1] + p.y[1]) / 2 : p.t[1]));
+    const k = io(t, lineAt(i), lineAt(i) + 0.72);
+    const mx = (a.x + bx) / 2;
+    return { d: `M${a.x},${a.y} C${mx},${a.y} ${mx},${by} ${bx - 2},${by}`, k, a };
+  });
   return (
     <AbsoluteFill style={{ background: "#000" }}>
-      <div style={{ position: "absolute", left: W / 2, top: H / 2 - 40, width: 0, height: 0 }}>
+      {/* card */}
+      <div style={{ position: "absolute", left: ccx, top: ccy, width: 0, height: 0 }}>
         <div style={{ position: "absolute", left: -pl.w / 2, top: -CARD_H / 2, width: pl.w, height: CARD_H, transformOrigin: "50% 50%", transform: `translateY(${(1 - enter) * 40}px) scale(${S})`, opacity: enter }}>
-          <Card pl={pl} reveal={reveal} />
-          <div style={{ position: "absolute", left: c.x - L.col / 2 - 2, top: c.y - L.row / 2 - 2, width: L.col + 4, height: L.row + 4, borderRadius: 3, border: "1px solid #fff", opacity: sm(t, 21.0, 21.4), boxShadow: "0 0 6px rgba(255,255,255,0.6)" }} />
+          <Card pl={pl} reveal={reveal} borders={0} />
+          {SMILE_X.map((_, i) => { const c = cellCenter(pl, 0, i + 1); const o = lit(i + 1); return o > 0.01 ? <div key={i} style={{ position: "absolute", left: c.x - L.col / 2, top: c.y - L.row / 2, width: L.col, height: L.row, borderRadius: 3, border: "1px solid rgba(255,255,255,0.9)", opacity: o, boxSizing: "border-box" }} /> : null; })}
         </div>
       </div>
-      <div style={{ position: "absolute", left: 0, width: W, top: H / 2 + (CARD_H * sc * 1.05) / 2 + 10, textAlign: "center", fontFamily: MONO, fontSize: 30, letterSpacing: 2, color: D.fg, opacity: lab, transform: `translateY(${(1 - lab) * 10}px)`, whiteSpace: "pre" }}>
-        {`${TOP.g.p.name} ${TOP.g.p.months[TOP.mi].exp.slice(2)} ${ROWNAME[TOP.row]}   涨速 `}<span style={{ color: TOP.a > 0 ? "#3b82f6" : "#ef4444" }}>{(TOP.a > 0 ? "+" : "") + TOP.a.toFixed(2)}</span>
-      </div>
+      {/* smile panel: VolChartCard-style surface */}
+      {chartIn > 0.01 ? (
+        <div style={{ position: "absolute", left: PX, top: PY, width: CHW + 2, opacity: chartIn, transformOrigin: "0 0", transform: `translateX(${(1 - chartIn) * 40}px) scale(${PS})`, background: DARK.popover, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, fontFamily: SANS, color: DARK.text }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "16px 20px 0", height: 46, boxSizing: "border-box" }}>
+            <span style={{ fontSize: 18, fontWeight: 600 }}>{LH.p.name} <span style={{ textDecoration: "underline", textUnderlineOffset: 3, fontWeight: 500 }}>{LH_M.exp.slice(2)}</span></span>
+            <span style={{ fontSize: 13, color: DARK.muted }}>{String(LH_E.last_time)}</span>
+          </div>
+          <div style={{ position: "relative", height: CHH, marginTop: 12 }}>
+            <div style={{ position: "absolute", inset: 0 }} dangerouslySetInnerHTML={{ __html: SMILE.svg.axes }} />
+            <div style={{ position: "absolute", inset: 0, clipPath: `inset(0 ${(1 - drawY) * 100}% 0 0)` }} dangerouslySetInnerHTML={{ __html: SMILE.svg.yday }} />
+            <div style={{ position: "absolute", inset: 0, clipPath: `inset(0 ${(1 - drawT) * 100}% 0 0)` }} dangerouslySetInnerHTML={{ __html: SMILE.svg.tday }} />
+          </div>
+          <svg width={CHW} height={CHH} style={{ position: "absolute", left: 0, top: 58 }}>
+            {SMILE.pts.map((p, i) => p.y ? <g key={i} opacity={sm(t, braceAt(i), braceAt(i) + 0.3)}><path d={brace(p.t[0] - 10, p.t[1] + 2, p.y[1] - 2, braceD(p))} fill="none" stroke="#ffffff" strokeOpacity={0.14} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" /><path d={brace(p.t[0] - 10, p.t[1] + 2, p.y[1] - 2, braceD(p))} fill="none" stroke="#ffffff" strokeOpacity={0.95} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></g> : <circle key={i} cx={p.t[0]} cy={p.t[1]} r={8} fill="none" stroke="#fff" strokeOpacity={0.85} strokeWidth={1.4} opacity={sm(t, braceAt(i), braceAt(i) + 0.3)} />)}
+          </svg>
+        </div>
+      ) : null}
+      {/* connectors */}
+      <svg width={W} height={H} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        {conn.map((c, i) => c.k > 0 ? (
+          <g key={i}>
+            <path d={c.d} fill="none" stroke="#ffffff" strokeOpacity={0.14} strokeWidth={7} strokeLinecap="round" pathLength={1} strokeDasharray={`${c.k} 1`} />
+            <path d={c.d} fill="none" stroke="#ffffff" strokeOpacity={0.95} strokeWidth={2.2} strokeLinecap="round" pathLength={1} strokeDasharray={`${c.k} 1`} />
+            <circle cx={c.a.x} cy={c.a.y} r={7} fill="#fff" opacity={0.18} />
+            <circle cx={c.a.x} cy={c.a.y} r={3.5} fill="#fff" />
+          </g>
+        ) : null)}
+      </svg>
     </AbsoluteFill>
   );
 };
-

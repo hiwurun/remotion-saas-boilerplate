@@ -17,9 +17,9 @@ import { ShotFall, ShotSpeed, T } from "./scenes";
 export const FPS = 60;
 export const W = 1920;
 export const H = 1080;
-export const TOTAL = Math.round(30.1 * FPS);
+export const TOTAL = Math.round(37.15 * FPS);
 const BGM = "openvlab-surf/bgm-vlog-beat.mp3";
-const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 23.36, swap: 25.4, s7: 27.32 };
+const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 28.77, swap: 31.55, s7: 34.4 };
 
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", monospace`;
