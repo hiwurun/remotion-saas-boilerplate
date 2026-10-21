@@ -1,7 +1,7 @@
 import React from "react";
 import * as echarts from "echarts";
-import { renderVolChart, type VolChartRender } from "../openvlab-surf/components/VolChart2D";
-import { DARK, type RawExpiry } from "../openvlab-surf/model/vol-chart";
+import type { VolChartRender } from "../openvlab-surf/components/VolChart2D";
+import { DARK } from "../openvlab-surf/model/vol-chart";
 import surface from "./data/volatility-surface-IM.json";
 
 /**
@@ -15,26 +15,6 @@ import surface from "./data/volatility-surface-IM.json";
 type E = Record<string, string | number>;
 const RES = (surface as unknown as { result: Record<string, E> }).result;
 export const EXPS = Object.keys(RES).sort();
-const parseAny = (s: unknown): unknown => {
-  if (typeof s !== "string") return s;
-  try { return JSON.parse(s.replace(/NaN/g, "null")); } catch { return undefined; }
-};
-export const rawExpiry = (exp: string): RawExpiry => {
-  const e = RES[exp];
-  const pairs = (k: string) => ((parseAny(e[k]) as [number, number | null][] | undefined) ?? []).filter((p) => p[1] != null).map(([a, b]) => [Number(a), Number(b)]) as [number, number][];
-  const rec = (k: string) => (parseAny(e[k]) as Record<string, number> | undefined) ?? {};
-  return {
-    theovol_tday: pairs("theovol_tday"), theovol_yday: pairs("theovol_yday"),
-    mktvol_tday_call_bid: pairs("mktvol_tday_call_bid"), mktvol_tday_call_ask: pairs("mktvol_tday_call_ask"),
-    mktvol_tday_put_bid: pairs("mktvol_tday_put_bid"), mktvol_tday_put_ask: pairs("mktvol_tday_put_ask"),
-    strike_poi_c: rec("strike_poi_c"), strike_poi_p: rec("strike_poi_p"), strike_oid_c: rec("strike_oid_c"), strike_oid_p: rec("strike_oid_p"),
-    display_strike: (parseAny(e.display_strike) as [number, number]) ?? [0, 0],
-    forward_td: Number(e.forward_td), forward_yd: Number(e.forward_yd),
-    atmvol_tday: Number(e.atmvol_tday), atmvol_yday: Number(e.atmvol_yday),
-    days: Number(e.days_to_expiry), expiry: exp,
-  };
-};
-
 /* ---------- term structure (atmv tab) ---------- */
 const r2 = (v: number) => Number(v.toFixed(2));
 export const TERM = EXPS.map((exp) => {
@@ -142,33 +122,4 @@ export const TermTable: React.FC<{ hl: number; hk: number }> = ({ hl, hk }) => {
   );
 };
 
-/** smile card body: header row (expiry/days · forward · ATM) exactly as VolChartCard, without the dialog title row */
-export const SmileCard: React.FC<{ d: RawExpiry; chart: VolChartRender; width: number; chartHeight: number; children?: React.ReactNode }> = ({ d, chart, width, chartHeight, children }) => {
-  const ratio = Number((((d.forward_td - d.forward_yd) / d.forward_yd) * 100).toFixed(2));
-  const ivDiff = d.atmvol_tday - d.atmvol_yday;
-  const sg = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
-  const sc = (v: number) => (v > 0 ? DARK.red : v < 0 ? DARK.green : "#9e9e9e");
-  return (
-    <div style={{ width, padding: 12, borderRadius: 12, background: DARK.popover, border: `1px solid ${BORDER}`, boxSizing: "border-box", color: DARK.text }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", fontSize: 12, padding: 4 }}>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ textDecoration: "underline", textUnderlineOffset: 2 }}>{d.expiry.substring(2)}</span>
-          <span style={{ color: DARK.muted }}>{d.days}天</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <span style={{ fontWeight: 500, color: DARK.future }}>{d.forward_td}</span>
-          <span style={{ color: sc(ratio) }}>({`${sg(ratio)}%`})</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-          <span style={{ color: DARK.ivText }}>{d.atmvol_tday.toFixed(2)}</span>
-          <span style={{ color: sc(ivDiff) }}>({sg(ivDiff)})</span>
-        </div>
-      </div>
-      <div style={{ position: "relative", marginTop: 8, height: chartHeight }}>
-        <div style={{ position: "absolute", inset: 0 }} dangerouslySetInnerHTML={{ __html: chart.svg }} />
-        {children}
-      </div>
-    </div>
-  );
-};
-export { renderVolChart, DARK };
+export { DARK };

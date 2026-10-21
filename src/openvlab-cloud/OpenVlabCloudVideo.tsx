@@ -4,10 +4,10 @@ import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
 import { SANS } from "../shared/fonts";
 import { CLAMP } from "../openvlab-market/theme";
 import { BrandMark } from "../openvlab-market/components/BrandMark";
-import { CARD_H, GRID, Placed, Product, PRODUCTS } from "./data";
+import { CARD_H, GRID, L, Placed, Product, PRODUCTS } from "./data";
+import { D, diffBg } from "./styles";
 import { StaticCard } from "./Card";
-import { ShotFall, ShotIM, ShotIntraday, ShotSpeed, ShotSurface, T } from "./scenes";
-import { diffBg } from "./styles";
+import { ShotFall, ShotSpeed, T } from "./scenes";
 
 /**
  * Shot-for-shot structure of Linear "Introducing Linear Releases" (29.0s).
@@ -17,9 +17,9 @@ import { diffBg } from "./styles";
 export const FPS = 60;
 export const W = 1920;
 export const H = 1080;
-export const TOTAL = Math.round(51.5 * FPS);
+export const TOTAL = Math.round(30.1 * FPS);
 const BGM = "openvlab-surf/bgm-vlog-beat.mp3";
-const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 42.73, swap: 46.07, s7: 48.78 };
+const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 23.36, swap: 25.4, s7: 27.32 };
 
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", monospace`;
@@ -51,7 +51,10 @@ const dot = (a: V3, b: V3) => a.x * b.x + a.y * b.y + a.z * b.z;
 const cross = (a: V3, b: V3): V3 => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 const len = (a: V3) => Math.sqrt(dot(a, a));
 const norm = (a: V3): V3 => { const l = len(a) || 1; return { x: a.x / l, y: a.y / l, z: a.z / l }; };
-const BINS = [0, 0.7, 1.4, 2.4, 3.6, 5, 7, 9.5, 12.5, 16, 21];
+const BINS = [0, 1.5, 4, 8, 14];
+/** depth cue without filters: brightness (opacity) + slight size falloff */
+const fo = (b: number) => 1 / (1 + 0.11 * b);
+const fs_ = (b: number) => Math.max(0.82, 1 - 0.012 * b);
 const bin = (b: number) => { let i = 0; while (i < BINS.length - 1 && b > (BINS[i] + BINS[i + 1]) / 2) i++; return i; };
 
 /* ---------------- flow-graph cards (local units, lie flat on y=0) ---------------- */
@@ -86,7 +89,7 @@ const GR = Math.ceil(PRODUCTS.length / GC);
 const GRID_CELLS = PRODUCTS.map((p, i) => {
   const cw = (GX1 - GX0) / GC, ch = (GY1 - GY0) / GR;
   const m = atm(p);
-  return { a: GX0 + (i % GC) * cw, b: GY0 + Math.floor(i / GC) * ch, cw, ch, name: p.name, v: m?.tday[3], bg: diffBg(m?.diff[3] ?? NaN) };
+  return { a: GX0 + (i % GC) * cw, b: GY0 + Math.floor(i / GC) * ch, cw, ch, name: p.name, v: m?.tday[3], d: m?.diff[3] ?? NaN };
 });
 /** line l: bezier from the left edge into the merge point, then the shared trunk. */
 const lineB0 = (l: number, n: number) => 90 + ((CH - 180) * (l + 0.5)) / n + (rnd(l + n) - 0.5) * 30;
@@ -118,8 +121,8 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
   const drawPath = (pts: { a: number; b: number; g: number }[], w: number, key: string) => {
     const pr = pts.map((p) => ({ ...P(W3(p.a, p.b)), g: p.g }));
     let ri = 0;
-    for (let i = 0; i + 1 < pr.length; i += 4) {
-      const run = pr.slice(i, Math.min(pr.length, i + 5));
+    for (let i = 0; i + 1 < pr.length; i += 8) {
+      const run = pr.slice(i, Math.min(pr.length, i + 9));
       if (run.some((p) => p.z < 20)) continue;
       const blur = run.reduce((a, p) => a + p.blur, 0) / run.length;
       const g = run.reduce((a, p) => a + p.g, 0) / run.length;
@@ -133,12 +136,41 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
   const tEnd = c.grid ? GX0 - 8 : EXIT - 40;
   drawPath(Array.from({ length: 21 }, (_, i) => ({ a: MERGE + ((tEnd - MERGE) * i) / 20, b: TB, g: 1 })), 4, "trunk");
   if (c.grid && cardOp > 0.01) {
-    GRID_CELLS.forEach((g, i) => {
-      const q = [W3(g.a + 1, g.b + 1), W3(g.a + g.cw - 1, g.b + 1), W3(g.a + g.cw - 1, g.b + g.ch - 1), W3(g.a + 1, g.b + g.ch - 1)].map(P);
-      if (q.some((pp) => pp.z < 20)) return;
-      const mid = P(W3(g.a + g.cw / 2, g.b + g.ch / 2));
-      push(bin(mid.blur), <polygon key={`g${i}`} points={q.map((pp) => `${pp.X},${pp.Y}`).join(" ")} fill={g.bg} fillOpacity={cardOp} />);
-    });
+    // refined minimal grid: one panel (single vertical gradient, hairline edge) + flat tiles with hairline gaps; text in the same affine group → pixel-aligned
+    const aff = (a0: number, b0: number, w: number, h: number) => {
+      const o = P(W3(a0, b0)), u = P(W3(a0 + w, b0)), v = P(W3(a0, b0 + h));
+      if ([o, u, v].some((pp) => pp.z < 20)) return null;
+      return { m: `matrix(${(u.X - o.X) / w},${(u.Y - o.Y) / w},${(v.X - o.X) / h},${(v.Y - o.Y) / h},${o.X},${o.Y})`, blur: P(W3(a0 + w / 2, b0 + h / 2)).blur };
+    };
+    const pad = 8, bw = GX1 - GX0 + 2 * pad, bh = GY1 - GY0 + 2 * pad;
+    const box = aff(GX0 - pad, GY0 - pad, bw, bh);
+    if (box) {
+      const cw = (GX1 - GX0) / GC, ch = (GY1 - GY0) / GR, gap = 1.5;
+      push(bin(box.blur), (
+        <g key="grid" transform={box.m} opacity={cardOp}>
+          <defs><linearGradient id={`gp${idx}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#17181b" /><stop offset="1" stopColor="#0e0f11" /></linearGradient></defs>
+          <rect width={bw} height={bh} rx={14} fill={`url(#gp${idx})`} stroke="#ffffff" strokeOpacity={0.1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          <line x1={14} x2={bw - 14} y1={0.75} y2={0.75} stroke="#ffffff" strokeOpacity={0.12} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          {GRID_CELLS.map((g, i) => {
+            const x = pad + (i % GC) * cw + gap / 2, y = pad + Math.floor(i / GC) * ch + gap / 2, w = cw - gap, h = ch - gap;
+            const k = Number.isFinite(g.d) ? Math.pow(Math.min(1, Math.abs(g.d) / 3), 0.7) : 0;
+            const tint = !Number.isFinite(g.d) || g.d === 0 ? "#ffffff" : g.d > 0 ? "#ff5a64" : "#2fd88f";
+            const units = [...g.name].reduce((n, c2) => n + (/[\u3000-\u9fff]/.test(c2) ? 1 : 0.62), 0);
+            const fs = 12 * Math.min(1, 4.4 / units);
+            return (
+              <g key={i}>
+                <rect x={x} y={y} width={w} height={h} rx={5} fill="#ffffff" fillOpacity={0.025} />
+                <rect x={x} y={y} width={w} height={h} rx={5} fill={tint} fillOpacity={k ? 0.04 + 0.16 * k : 0} />
+                <g opacity={exitOp}>
+                  <text x={x + w / 2} y={y + h * 0.46} textAnchor="middle" fontFamily={SANS} fontWeight={500} fontSize={fs} fill="#f4f5f7" fillOpacity={0.94}>{g.name}</text>
+                  {Number.isFinite(g.v) ? <text x={x + w / 2} y={y + h * 0.46 + 15} textAnchor="middle" fontFamily={MONO} fontSize={10.5} fill="#ffffff" fillOpacity={0.5} style={{ fontVariantNumeric: "tabular-nums" }}>{(g.v as number).toFixed(2)}</text> : null}
+                </g>
+              </g>
+            );
+          })}
+        </g>
+      ));
+    }
   }
 
   // nodes + labels with greedy collision avoidance (sharpest first), title, tag, exit label
@@ -165,18 +197,18 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
   for (const cd of cands) {
     const { p } = cd;
     const sz = Math.max(4, Math.min(6, 5 * p.s * 0.8));
-    const fs = Math.max(11, Math.min(17, 11 * p.s));
+    const fs = Math.max(11, Math.min(17, 11 * p.s)) * fs_(p.blur);
     const tw = [...cd.label].reduce((a, ch) => a + (/[\u3000-\u9fff]/.test(ch) ? 1 : 0.62), 0) * fs;
     const sq = `color-mix(in srgb, ${cd.col} 18%, #ffffff)`;
-    const blurCss = p.blur > 0.4 ? `blur(${p.blur.toFixed(1)}px)` : undefined;
-    divs.push(<div key={cd.key} style={{ position: "absolute", left: p.X - sz / 2, top: p.Y - sz / 2, width: sz, height: sz, background: sq, opacity: cd.o, filter: blurCss, boxShadow: "0 0 6px rgba(255,255,255,0.35)" }} />);
+    const dk = fo(p.blur);
+    divs.push(<div key={cd.key} style={{ position: "absolute", left: p.X - sz / 2, top: p.Y - sz / 2, width: sz, height: sz, background: sq, opacity: cd.o * dk, boxShadow: "0 0 6px rgba(255,255,255,0.35)" }} />);
     // try right, top-right, upper, then give up (no overlaps)
     const tries = [{ dx: sz + 6, dy: -fs * 0.55 }, { dx: sz + 4, dy: -fs * 1.45 }, { dx: sz + 4, dy: -fs * 2.4 }];
     for (const tr of tries) {
       const b = { x0: p.X + tr.dx - 2, y0: p.Y + tr.dy - 2, x1: p.X + tr.dx + tw + 2, y1: p.Y + tr.dy + fs * 1.15 + 2 };
       if (!hit(b)) {
         boxes.push(b);
-        divs.push(<div key={`${cd.key}t`} style={{ position: "absolute", left: b.x0 + 2, top: b.y0 + 2, fontFamily: MONO, fontSize: fs, lineHeight: 1.1, color: "#f5f5f5", opacity: 0.8 * cd.o, whiteSpace: "nowrap", filter: blurCss }}>{cd.label}</div>);
+        divs.push(<div key={`${cd.key}t`} style={{ position: "absolute", left: b.x0 + 2, top: b.y0 + 2, fontFamily: MONO, fontSize: fs, lineHeight: 1.1, color: "#f5f5f5", opacity: 0.8 * cd.o * dk, whiteSpace: "nowrap" }}>{cd.label}</div>);
         break;
       }
     }
@@ -185,7 +217,7 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
   if (titleOp > 0.01 && on(tp)) {
     const ts = Math.max(12, Math.min(34, 30 * tp.s));
     divs.push(
-      <div key="title" style={{ position: "absolute", left: tp.X, top: tp.Y, opacity: titleOp, filter: tp.blur > 0.4 ? `blur(${tp.blur.toFixed(1)}px)` : undefined, display: "flex", alignItems: "center", gap: ts * 0.6, transform: "translateY(-50%)", whiteSpace: "nowrap" }}>
+      <div key="title" style={{ position: "absolute", left: tp.X, top: tp.Y, opacity: titleOp * fo(tp.blur), display: "flex", alignItems: "center", gap: ts * 0.6, transform: "translateY(-50%)", whiteSpace: "nowrap" }}>
         <span style={{ fontFamily: MONO, fontStyle: "italic", fontSize: ts, color: "#8a8a8a", letterSpacing: ts * 0.06 }}>{c.title.toUpperCase()}</span>
         <span style={{ display: "flex", alignItems: "center", gap: ts * 0.3, border: "1px solid #2a2a2a", borderRadius: ts, padding: `${ts * 0.15}px ${ts * 0.45}px`, fontFamily: MONO, fontSize: ts * 0.62, color: "#d4d4d4" }}>
           <span style={{ width: ts * 0.28, height: ts * 0.28, borderRadius: "50%", background: c.tag.dot, boxShadow: `0 0 ${ts * 0.3}px ${c.tag.dot}` }} />
@@ -194,25 +226,11 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
       </div>,
     );
   }
-  if (c.grid && exitOp > 0.01) {
-    GRID_CELLS.forEach((g, i) => {
-      const p = at(g.a + g.cw / 2, g.b + g.ch / 2);
-      if (!on(p) || p.blur > 3) return;
-      const fs = 11 * p.s;
-      if (fs < 7) return;
-      divs.push(
-        <div key={`gt${i}`} style={{ position: "absolute", left: p.X, top: p.Y, transform: "translate(-50%,-50%)", opacity: exitOp, textAlign: "center", fontFamily: MONO, fontSize: fs, lineHeight: 1.15, color: "rgba(245,245,245,0.85)", whiteSpace: "nowrap", filter: p.blur > 0.4 ? `blur(${p.blur.toFixed(1)}px)` : undefined }}>
-          <div style={{ fontSize: fs * 0.9 }}>{g.name}</div>
-          {Number.isFinite(g.v) ? <div>{(g.v as number).toFixed(2)}</div> : null}
-        </div>,
-      );
-    });
-  }
   const ep = at(EXIT + 4, TB);
   if (!c.grid && exitOp > 0.01 && on(ep)) {
     const es = Math.max(12, Math.min(26, 22 * ep.s));
     divs.push(
-      <div key="exit" style={{ position: "absolute", left: ep.X, top: ep.Y, opacity: exitOp, filter: ep.blur > 0.4 ? `blur(${ep.blur.toFixed(1)}px)` : undefined, transform: "translateY(-50%)", whiteSpace: "nowrap", fontFamily: MONO }}>
+      <div key="exit" style={{ position: "absolute", left: ep.X, top: ep.Y, opacity: exitOp * fo(ep.blur), transform: "translateY(-50%)", whiteSpace: "nowrap", fontFamily: MONO }}>
         <div style={{ fontSize: es, color: WHITE, letterSpacing: es * 0.05 }}>{c.exit.label}</div>
         <div style={{ fontSize: es * 0.68, color: "#8a8a8a", marginTop: es * 0.25 }}>{c.exit.sub}</div>
       </div>,
@@ -222,8 +240,7 @@ const CardLayer: React.FC<{ c: CardDef; cam: Cam; t: number; enter?: number; idx
   return (
     <AbsoluteFill style={{ opacity: op }}>
       <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
-        <defs>{BINS.map((s, i) => (i ? <filter key={i} id={`b${idx}-${i}`} x={-200} y={-200} width={W + 400} height={H + 400} filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation={s} /></filter> : null))}</defs>
-        {BINS.map((_, i) => (bins[i] ? <g key={i} filter={i ? `url(#b${idx}-${i})` : undefined}>{bins[i]}</g> : null))}
+        {BINS.map((b, i) => (bins[i] ? <g key={i} opacity={fo(b)}>{bins[i]}</g> : null))}
       </svg>
       {divs}
     </AbsoluteFill>
@@ -241,7 +258,13 @@ const makeCam = (keys: K[]) => (t: number) => {
     let i = 0;
     while (keys[i + 1].t < t) i++;
     const a = keys[i], b = keys[i + 1], dt = b.t - a.t;
-    const tan = (j: number) => (j <= 0 || j >= n ? 0 : (f(keys[j + 1]) - f(keys[j - 1])) / (keys[j + 1].t - keys[j - 1].t));
+    const sl = (j: number) => (f(keys[j + 1]) - f(keys[j])) / (keys[j + 1].t - keys[j].t);
+    const tan = (j: number) => {
+      if (j <= 0 || j >= n) return 0;
+      const d0 = sl(j - 1), d1 = sl(j);
+      if (d0 * d1 <= 0) return 0; // local extremum / flat neighbour → stop there
+      return (2 * d0 * d1) / (d0 + d1); // harmonic mean → monotone, never overshoots
+    };
     const s = (t - a.t) / dt, s2 = s * s, s3 = s2 * s;
     return (2 * s3 - 3 * s2 + 1) * f(a) + (s3 - 2 * s2 + s) * dt * tan(i) + (-2 * s3 + 3 * s2) * f(b) + (s3 - s2) * dt * tan(i + 1);
   };
@@ -252,7 +275,7 @@ const PULL = makeCam([
   { t: 0, x: 300, y: 450, z: 230, rx: 16, ry: -16, rz: 46 },
   { t: 2.5, x: 520, y: 440, z: 330, rx: 21, ry: -22, rz: 30 },
   { t: 4.5, x: 640, y: 428, z: 540, rx: 46, ry: -58, rz: 9 },
-  { t: 6.3, x: 682, y: 418, z: 833, rx: 87, ry: -89, rz: 0.4 },
+  { t: 6.3, x: 682, y: 418, z: 833, rx: 88.5, ry: -90, rz: 0 },
   { t: 8.0, x: 682, y: 418, z: 833, rx: 88.5, ry: -90, rz: 0 },
 ]);
 const pullCam = (t: number): Cam => {
@@ -268,6 +291,17 @@ const BLUR_Q = [0, 1.5, 3.5, 7, 12];
 const qBlur = (b: number) => BLUR_Q.reduce((best, v) => (Math.abs(v - b) < Math.abs(best - b) ? v : best), 0);
 const STREAM = PRODUCTS.slice(0, 40).map((p, i): Placed => ({ p, x: 0, y: 0, w: GRID.find((g) => g.p === p)!.w, idx: i }));
 const SF = 1300, ZF = 1150;
+/** far-away LOD: same card silhouette + heat cells, no text (text is illegible at this size and is the main raster cost) */
+const LodCard = React.memo(({ pl }: { pl: Placed }) => (
+  <svg width={pl.w} height={CARD_H} style={{ position: "absolute", left: 0, top: 0 }}>
+    <rect x={0.5} y={0.5} width={pl.w - 1} height={CARD_H - 1} rx={6} fill={D.card} stroke={D.border} />
+    <rect x={L.pad} y={L.pad} width={pl.w - 2 * L.pad} height={28} rx={4} fill={D.muted} fillOpacity={0.2} />
+    <rect x={L.pad + 6} y={L.pad + 9} width={Math.min(60, pl.w * 0.3)} height={10} rx={2} fill={D.fg} fillOpacity={0.5} />
+    {pl.p.months.map((m, mi) => m.diff.slice(0, 7).map((v, k) => (
+      <rect key={`${mi}-${k}`} x={L.pad + L.label + mi * L.col + 1} y={L.pad + L.head + 5 + L.header + (k + 1) * L.row + 1} width={L.col - 2} height={L.row - 2} rx={2} fill={m.ready ? diffBg(v) : D.notReadyBg} />
+    )))}
+  </svg>
+));
 const CardStream: React.FC<{ t: number }> = ({ t }) => {
   const items: React.ReactNode[] = [];
   for (let i = STREAM.length - 1; i >= 0; i--) {
@@ -283,8 +317,9 @@ const CardStream: React.FC<{ t: number }> = ({ t }) => {
     if (z < 120) continue;
     const b = qBlur(Math.min(12, (1.7 * Math.max(0, ZF - z)) / z));
     items.push(
-      <div key={pl.p.code} style={{ position: "absolute", left: 0, top: 0, opacity: Math.min(1, k * 2), transform: `translate(${X}px, ${Y}px) scale(${sc}) perspective(1400px) rotateX(10deg) rotateY(-9deg) translate(-50%, -50%)`, transformOrigin: "0 0", filter: b ? `blur(${b / sc}px)` : undefined, width: pl.w, height: CARD_H }}>
-        <StaticCard pl={pl} />
+      <div key={pl.p.code} style={{ position: "absolute", left: 0, top: 0, opacity: Math.min(1, k * 2), transform: `translate(${X}px, ${Y}px) scale(${sc}) perspective(1400px) rotateX(10deg) rotateY(-9deg) translate(-50%, -50%)`, transformOrigin: "0 0", willChange: "transform", width: pl.w, height: CARD_H }}>
+        {sc < 0.75 ? <LodCard pl={pl} /> : <StaticCard pl={pl} />}
+        {b ? <div style={{ position: "absolute", inset: 0, borderRadius: 6, background: "#000", opacity: 1 - fo(b) }} /> : null}
       </div>,
     );
   }
@@ -310,9 +345,6 @@ export const OpenVlabCloudVideo: React.FC = () => {
   else if (t < S.s5) body = <CardStream t={t} />;
   else if (t < T.s6) body = <ShotFall t={t} />;
   else if (t < T.s7) body = <ShotSpeed t={t} />;
-  else if (t < T.s8) body = <ShotIM t={t} />;
-  else if (t < T.s9) body = <ShotIntraday t={t} />;
-  else if (t < S.s6) body = <ShotSurface t={t} />;
   else if (t < S.s7)
     body = (
       <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
@@ -320,7 +352,7 @@ export const OpenVlabCloudVideo: React.FC = () => {
           const x = (rnd(i) * W + (t - S.s6) * (6 + rnd(i + 9) * 10)) % W;
           const y = (rnd(i + 3) * H - (t - S.s6) * (3 + rnd(i + 5) * 6) + H) % H;
           const s = 1 + rnd(i + 2) * 1.6;
-          return <div key={i} style={{ position: "absolute", left: x, top: y, width: s, height: s, borderRadius: "50%", background: "#fff", opacity: 0.18 + rnd(i + 4) * 0.35, filter: rnd(i + 8) > 0.6 ? "blur(1px)" : undefined }} />;
+          return <div key={i} style={{ position: "absolute", left: x, top: y, width: s, height: s, borderRadius: "50%", background: "#fff", opacity: 0.18 + rnd(i + 4) * 0.35 }} />;
         })}
         {t < S.swap ? <Typed text="波动率云图" t={t} t0={S.s6 + 0.12} cps={9} /> : <Typed text="OPENVLAB.CN" t={t} t0={S.swap} cps={9} />}
       </AbsoluteFill>
