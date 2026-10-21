@@ -8,7 +8,8 @@ import { LaunchVideoSchema } from "./launch/schema";
 import { OpenVLabVideo, calculateOpenVLabMetadata } from "./openvlab-market/OpenVLabVideo";
 import { OPENVLAB_DEFAULTS, OpenVLabSchema } from "./openvlab-market/schema";
 import { OpenVlabSurfVideo } from "./openvlab-surf/OpenVlabSurfVideo";
-import { OpenVlabSurfCover } from "./openvlab-surf/Cover";
+import { OpenVlabSurfCover, OpenVlabSurfCover43, OpenVlabSurfCover34 } from "./openvlab-surf/Cover";
+import { OpenVlabCloudVideo, FPS as CLOUD_FPS, H as CLOUD_H, TOTAL as CLOUD_TOTAL, W as CLOUD_W } from "./openvlab-cloud/OpenVlabCloudVideo";
 import { FPS as SURF_FPS, H as SURF_H, TOTAL as SURF_TOTAL, W as SURF_W } from "./openvlab-surf/timeline";
 
 export const RemotionRoot: React.FC = () => {
@@ -182,7 +183,10 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={OPENVLAB_DEFAULTS}
       />
       <Composition id="openvlab-surf" component={OpenVlabSurfVideo} width={SURF_W} height={SURF_H} fps={SURF_FPS} durationInFrames={SURF_TOTAL} />
-      <Still id="openvlab-surf-cover" component={OpenVlabSurfCover} width={1920} height={1080} />
+      <Composition id="openvlab-cloud" component={OpenVlabCloudVideo} width={CLOUD_W} height={CLOUD_H} fps={CLOUD_FPS} durationInFrames={CLOUD_TOTAL} />
+      <Still id="openvlab-surf-cover-16x9" component={OpenVlabSurfCover} width={1920} height={1080} />
+      <Still id="openvlab-surf-cover-4x3" component={OpenVlabSurfCover43} width={1440} height={1080} />
+      <Still id="openvlab-surf-cover-3x4" component={OpenVlabSurfCover34} width={1080} height={1440} />
     </>
   );
 };
