@@ -7,7 +7,7 @@ import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { CARD_H, GRID, L, Placed, Product, PRODUCTS } from "./data";
 import { D, diffBg } from "./styles";
 import { StaticCard } from "./Card";
-import { ShotFall, ShotSpeed, T } from "./scenes";
+import { GW, GH, ShotFall, ShotSpeed, T } from "./scenes";
 
 /**
  * Shot-for-shot structure of Linear "Introducing Linear Releases" (29.0s).
@@ -17,17 +17,18 @@ import { ShotFall, ShotSpeed, T } from "./scenes";
 export const FPS = 60;
 export const W = 1920;
 export const H = 1080;
-export const TOTAL = Math.round(37.15 * FPS);
+export const TOTAL = Math.round(38.41 * FPS);
 const BGM = "openvlab-surf/bgm-vlog-beat.mp3";
-const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 28.77, swap: 31.55, s7: 34.4 };
+const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 30.03, swap: 32.81, s7: 35.66 };
 
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", monospace`;
 const WHITE = "#f5f5f5";
 const GREEN = "#16c784", RED = "#ea3943", BLUE = "#60a5fa";
 
-const smooth = (t: number, a: number, b: number) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
 const outCubic = (t: number, a: number, b: number) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return 1 - Math.pow(1 - x, 3); };
+const io3 = (t: number, a: number, b: number) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const smooth = (t: number, a: number, b: number) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
 const rnd = (i: number) => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 type V3 = { x: number; y: number; z: number };
 
@@ -302,24 +303,49 @@ const LodCard = React.memo(({ pl }: { pl: Placed }) => (
     )))}
   </svg>
 ));
+/** opening stream unchanged; from TILE_T each card gradually flattens into its wall tile, then the tiled wall shrinks onto ShotFall's layout (z 0.38, shifted −372px) at S.s5 */
+const TILE_T = 12.9;
+const GRID_OF = new Map(GRID.map((g) => [g.p.code, g]));
+const IN_STREAM = new Set(STREAM.map((s) => s.p.code));
 const CardStream: React.FC<{ t: number }> = ({ t }) => {
+  const zk = io3(t, TILE_T + 0.7, S.s5 - 0.1);
+  const zW = Math.exp(Math.log(0.62) + (Math.log(0.38) - Math.log(0.62)) * zk), shift = -372 * zk;
+  const tile = (code: string) => { const g = GRID_OF.get(code)!; return { X: W / 2 + shift + (g.x + g.w / 2 - GW / 2) * zW, Y: H / 2 + (g.y + CARD_H / 2 - GH / 2) * zW }; };
   const items: React.ReactNode[] = [];
+  // wall cards that were never in the stream fade in at their tiles (behind)
+  const others = io3(t, TILE_T + 0.3, TILE_T + 1.3);
+  if (others > 0) for (const g of GRID) {
+    if (IN_STREAM.has(g.p.code)) continue;
+    const { X, Y } = tile(g.p.code);
+    if (X + g.w * zW < 0 || X - g.w * zW > W || Y + CARD_H * zW < 0 || Y - CARD_H * zW > H) continue;
+    items.push(
+      <div key={g.p.code} style={{ position: "absolute", left: 0, top: 0, opacity: others, transform: `translate(${X}px, ${Y}px) scale(${zW}) translate(-50%, -50%)`, transformOrigin: "0 0", width: g.w, height: CARD_H }}>
+        <StaticCard pl={{ ...g, x: 0, y: 0 }} borders={0} />
+      </div>,
+    );
+  }
   for (let i = STREAM.length - 1; i >= 0; i--) {
     const te = S.s4 + 0.05 + i * 0.07;
     const k = outCubic(t, te, te + 0.95);
     if (k <= 0) continue;
     const dz = (t - S.s4) * 55;
     const x = -300 + i * 92 - (1 - k) * 260, y = -110 + i * 52 - (1 - k) * 160, z = 520 + i * 95 - (1 - k) * 380 - dz;
-    const sc = SF / z;
-    const X = W / 2 + x * sc, Y = H / 2 - y * sc;
     const pl = STREAM[i];
-    if (sc < 0.15 || X + pl.w * sc < -100 || X - pl.w * sc > W + 100 || Y - CARD_H * sc > H + 100) continue;
-    if (z < 120) continue;
-    const b = qBlur(Math.min(12, (1.7 * Math.max(0, ZF - z)) / z));
+    const bt = TILE_T + (i / STREAM.length) * 0.6; // gradual: front cards first
+    const b = io3(t, bt, bt + 1.1);
+    if (b <= 0 && z < 120) continue;
+    const sc0 = SF / Math.max(z, 120);
+    const X0 = W / 2 + x * sc0, Y0 = H / 2 - y * sc0;
+    const tt = tile(pl.p.code);
+    const sc = Math.exp(Math.log(sc0) + (Math.log(zW) - Math.log(sc0)) * b);
+    const X = X0 + (tt.X - X0) * b, Y = Y0 + (tt.Y - Y0) * b;
+    if (sc < 0.15 || X + pl.w * sc < -100 || X - pl.w * sc > W + 100 || Y - CARD_H * sc > H + 100 || Y + CARD_H * sc < -100) continue;
+    const bl = qBlur(Math.min(12, (1.7 * Math.max(0, ZF - z)) / Math.max(z, 120))) * (1 - b);
+    const rot = 1 - b;
     items.push(
-      <div key={pl.p.code} style={{ position: "absolute", left: 0, top: 0, opacity: Math.min(1, k * 2), transform: `translate(${X}px, ${Y}px) scale(${sc}) perspective(1400px) rotateX(10deg) rotateY(-9deg) translate(-50%, -50%)`, transformOrigin: "0 0", willChange: "transform", width: pl.w, height: CARD_H }}>
-        {sc < 0.75 ? <LodCard pl={pl} /> : <StaticCard pl={pl} />}
-        {b ? <div style={{ position: "absolute", inset: 0, borderRadius: 6, background: "#000", opacity: 1 - fo(b) }} /> : null}
+      <div key={pl.p.code} style={{ position: "absolute", left: 0, top: 0, opacity: b > 0 ? 1 : Math.min(1, k * 2), transform: `translate(${X}px, ${Y}px) scale(${sc}) perspective(1400px) rotateX(${10 * rot}deg) rotateY(${-9 * rot}deg) translate(-50%, -50%)`, transformOrigin: "0 0", willChange: "transform", width: pl.w, height: CARD_H }}>
+        {sc < 0.75 && b < 0.5 ? <LodCard pl={pl} /> : <StaticCard pl={pl} borders={b > 0 ? 0 : undefined} />}
+        {bl > 0.05 ? <div style={{ position: "absolute", inset: 0, borderRadius: 6, background: "#000", opacity: 1 - fo(bl) }} /> : null}
       </div>,
     );
   }

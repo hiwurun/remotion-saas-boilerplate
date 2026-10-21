@@ -14,7 +14,7 @@ import cloudClose from "./data/surfacemap-close.json";
 export const W = 1920, H = 1080;
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", monospace`;
-export const T = { s5: 15.44, s6: 19.41, s7: 28.77 };
+export const T = { s4: 10.66, s5: 15.44, s6: 20.65, s7: 30.03 };
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const sm = (t: number, a: number, b: number) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
@@ -60,27 +60,75 @@ const Wall: React.FC<{ cam: CamS; cards: WallCard[]; overlay?: React.ReactNode; 
 const allCards = (f?: (g: Placed) => Partial<WallCard>): WallCard[] => GRID.map((g) => ({ pl: g, ...(f ? f(g) : {}) }));
 
 /* ---------------- facts derived from the data ---------------- */
-const GW = Math.max(...GRID.map((g) => g.x + g.w)), GH = Math.max(...GRID.map((g) => g.y + CARD_H));
+export const GW = Math.max(...GRID.map((g) => g.x + g.w)), GH = Math.max(...GRID.map((g) => g.y + CARD_H));
 const mainM = (p: Placed["p"]) => p.months.find((m) => m.exp === p.exp) ?? p.months[0];
 const FALL_DIFF = GRID.map((g) => mainM(g.p)?.diff[3]).filter((v): v is number => Number.isFinite(v));
 const FALLING = new Set(GRID.filter((g) => (mainM(g.p)?.diff[3] ?? 0) < 0).map((g) => g.p.code));
 const N_ALL = FALL_DIFF.length;
 /* ---------------- A · 哪些品种隐波下跌？ ---------------- */
 const FALL_LIST = GRID.filter((g) => FALLING.has(g.p.code)).map((g) => ({ code: g.p.code, name: g.p.name, d: mainM(g.p).diff[3] })).sort((a, b) => a.d - b.d);
-const FALL_T0 = 15.9, FALL_DT = 0.075; // item i lights at FALL_T0 + i * FALL_DT (≈ 2.4s for 32)
+const FALL_T0 = 15.9, FALL_DT = 0.07; // item i lights at FALL_T0 + i * FALL_DT (≈ 2.4s for 32)
 const fallAt = new Map(FALL_LIST.map((f, i) => [f.code, FALL_T0 + i * FALL_DT]));
+/** frozen end-state of the wall (all 84 lit/dimmed as at the end of the list), IM excluded; rendered once, moved by one transform */
+const FROZEN_Z = 0.4;
+const FrozenWall = React.memo(() => (
+  <div style={{ position: "absolute", left: 0, top: 0, zoom: FROZEN_Z } as React.CSSProperties}>
+    {GRID.filter((g) => g.p.code !== "MO").map((g) => (
+      <div key={g.p.code} style={{ position: "absolute", left: g.x, top: g.y, width: g.w, height: CARD_H, opacity: FALLING.has(g.p.code) ? 1 : 0.2 }}>
+        <StaticCard pl={{ ...g, x: 0, y: 0 }} borders={0} />
+      </div>
+    ))}
+  </div>
+));
+const IM_WALL = GRID.find((g) => g.p.code === "MO")!;
+const ImPair = React.memo(({ xf }: { xf: number }) => (
+  <>
+    <div style={{ position: "absolute", left: -IM_WALL.w / 2, top: -CARD_H / 2, width: IM_WALL.w, height: CARD_H }}><StaticCard pl={{ ...IM_WALL, x: 0, y: 0 }} borders={0} /></div>
+    {xf > 0 ? <div style={{ position: "absolute", left: -LH.w / 2, top: -CARD_H / 2, width: LH.w, height: CARD_H, opacity: xf }}><StaticCard pl={{ ...LH, x: 0, y: 0 }} borders={0} /></div> : null}
+  </>
+));
 export const ShotFall: React.FC<{ t: number }> = ({ t }) => {
-  const k = io(t, T.s5, T.s6);
+  const PUSH = T.s6 - 2.1; // slow push-in onto the IM card, lands on ShotSpeed's opening frame
+  const k = io(t, T.s5, PUSH);
   const dimK = sm(t, 15.5, 15.9);
+  const im = IM_WALL;
+  const imC = { x: im.x + im.w / 2, y: im.y + CARD_H / 2 };
+  const zEnd = Math.min(1150 / LH.w, 600 / CARD_H); // = ShotSpeed sc0
+  const z0 = lerpLog(0.38, FROZEN_Z, k);
   const n = FALL_LIST.filter((f) => t >= fallAt.get(f.code)!).length;
   const rows = Math.ceil(FALL_LIST.length / 2);
-  return (
-    <AbsoluteFill>
+  let wall: React.ReactNode;
+  if (t < PUSH) {
+    wall = (
       <AbsoluteFill style={{ transform: "translateX(-372px)" }}>
-        <Wall cam={{ cx: GW * 0.5, cy: GH * 0.5, z: lerpLog(0.38, 0.4, k), aperture: 0 }}
+        <Wall cam={{ cx: GW * 0.5, cy: GH * 0.5, z: z0, aperture: 0 }}
           cards={allCards((g) => { const ta = fallAt.get(g.p.code); return { borders: 0, op: ta === undefined ? 1 - 0.8 * dimK : 1 - 0.8 * dimK + 0.8 * sm(t, ta - 0.05, ta + 0.2) }; })} />
       </AbsoluteFill>
-      <div style={{ position: "absolute", left: 1250, top: 210, width: 600, fontFamily: MONO, color: D.fg, opacity: sm(t, 15.5, 15.9) }}>
+    );
+  } else {
+    const e = io(t, PUSH, T.s6); // in-out cubic: soft start, gentle settle
+    const z = lerpLog(FROZEN_Z, zEnd, e);
+    const s0 = { x: (imC.x - GW * 0.5) * FROZEN_Z - 372, y: (imC.y - GH * 0.5) * FROZEN_Z };
+    const o = { x: s0.x * (1 - e), y: s0.y * (1 - e) }; // IM screen offset from centre: straight path
+    const others = 1 - sm(t, PUSH, PUSH + 1.0);
+    const xf = Math.round(sm(t, PUSH + 0.35, PUSH + 0.95) * 20) / 20; // quantised → ImPair memo re-renders ≤20×
+    wall = (
+      <AbsoluteFill>
+        {others > 0.005 ? (
+          <div style={{ position: "absolute", left: 0, top: 0, opacity: others, transformOrigin: "0 0", willChange: "transform, opacity", transform: `translate(${W / 2 + o.x - imC.x * z}px, ${H / 2 + o.y - imC.y * z}px) scale(${z / FROZEN_Z})` }}>
+            <FrozenWall />
+          </div>
+        ) : null}
+        <div style={{ position: "absolute", left: W / 2 + o.x, top: H / 2 + o.y, width: 0, height: 0, transformOrigin: "0 0", transform: `scale(${z})` }}>
+          <ImPair xf={xf} />
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  return (
+    <AbsoluteFill>
+      {wall}
+      <div style={{ position: "absolute", left: 1250, top: 210, width: 600, fontFamily: MONO, color: D.fg, opacity: sm(t, 15.5, 15.9) * (1 - sm(t, PUSH - 0.1, PUSH + 0.3)) }}>
         <div style={{ fontSize: 40, letterSpacing: 2, whiteSpace: "pre" }}>隐波下跌  <span style={{ color: "#2ee59d" }}>{String(n).padStart(2, "0")}</span> / {N_ALL}</div>
         <div style={{ height: 1, background: D.border, margin: "26px 0 18px" }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: `repeat(${rows}, 34px)`, gridAutoFlow: "column", columnGap: 40 }}>
@@ -183,14 +231,14 @@ const brace = (x: number, y1: number, y2: number, d = 9) => {
 export const ShotSpeed: React.FC<{ t: number }> = ({ t }) => {
   const t0 = T.s6;
   const pl: Placed = { ...LH, x: 0, y: 0 };
-  const enter = io(t, t0, t0 + 0.8);
+  const enter = 1; // no entrance: the card arrives via the push-in at the end of ShotFall (match cut)
   const slide = io(t, t0 + 2.55, t0 + 3.4);
   const sc0 = Math.min(1150 / pl.w, 600 / CARD_H), sc1 = Math.min(560 / pl.w, 560 / CARD_H);
   const S = lerp(sc0 * lerp(0.96, 1, enter), sc1, slide);
   const ccx = lerp(W / 2, 400, slide), ccy = H / 2;
   const hiAt = (row: number) => t0 + 0.95 + (row - 1) * 0.22; // 20P..20C one by one
   const lit = (row: number) => sm(t, hiAt(row), hiAt(row) + 0.18);
-  const reveal: Reveal = { cell: (mi, row) => (mi === 0 && row > 0 ? 0.35 + 0.65 * lit(row) : 1 - 0.8 * sm(t, t0 + 0.9, t0 + 1.3)), outline: () => 0 };
+  const reveal: Reveal = { cell: (mi, row) => (mi === 0 && row > 0 ? Math.min(1, 1 - 0.65 * sm(t, t0 + 0.35, t0 + 0.85) + 0.65 * lit(row)) : 1 - 0.8 * sm(t, t0 + 0.9, t0 + 1.3)), outline: () => 0 };
   // chart panel (right)
   const PS = 1.28, PX = W - 60 - (CHW + 2) * PS, PY = (H - (CHH + 70) * PS) / 2;
   const chartIn = io(t, t0 + 2.9, t0 + 3.6);
