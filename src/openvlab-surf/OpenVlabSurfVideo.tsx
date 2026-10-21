@@ -377,7 +377,6 @@ export const OpenVlabSurfVideo: React.FC = () => {
   const mark = prog(f, END.mark[0], END.mark[1]);
   const word = prog(f, END.word[0], END.word[1], EASE_OUT);
   const take = prog(f, END.take, END.take + 0.7, EASE_OUT);
-  const tag = prog(f, END.tag, END.tag + 0.7, EASE_OUT);
   const labelO = fadeWin(f, 4.8, 41.4, 0.6);
 
   return (
@@ -475,12 +474,7 @@ export const OpenVlabSurfVideo: React.FC = () => {
       {word > 0 ? <div style={{ position: "absolute", left: 0, width: W, top: MARK_CY + MARK / 2 + 28, textAlign: "center", fontSize: 112, fontWeight: 700, letterSpacing: "-0.045em", color: C.ink, lineHeight: "124px", opacity: word, transform: `translateY(${(1 - word) * 16}px)`, filter: blurOf((1 - word) * 8) }}>OpenVlab</div> : null}
       {take > 0 ? (
         <div style={{ position: "absolute", left: 0, width: W, top: 700, textAlign: "center", fontSize: 48, fontWeight: 600, color: C.ink, opacity: take, transform: `translateY(${(1 - take) * 14}px)`, filter: blurOf((1 - take) * 6) }}>
-          看懂曲面，就知道保护该买在哪里。
-        </div>
-      ) : null}
-      {tag > 0 ? (
-        <div style={{ position: "absolute", left: 0, width: W, top: 790, textAlign: "center", fontSize: 28, color: C.muted, opacity: tag, letterSpacing: "0.04em" }}>
-          专业、极简、跨平台的期权行情与风险分析工具 · <span style={{ color: AMBER_HI }}>openvlab.cn</span>
+          看懂波动率曲面，掌握市场先机
         </div>
       ) : null}
       <Audio src={staticFile("openvlab-surf/bgm-vlog-beat.mp3")} volume={(fr) => interpolate(fr, [0, sec(1), TOTAL - sec(3), TOTAL - sec(0.13)], [0, 0.5, 0.5, 0], CLAMP)} />
