@@ -62,11 +62,37 @@ export const OpenVlabSurfCover: React.FC = () => (
     {/* title block */}
     {/* vertically centred in the frame */}
     <div style={{ position: "absolute", left: 96 + DX, top: 0, height: 1080, width: 860, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-      <div style={{ fontSize: 132, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1.08, color: C.ink }}>
-        如何看懂
+      <div style={{ fontSize: 132, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1.08, color: C.ink, whiteSpace: "nowrap" }}>
+        看懂 3D 曲面
         <br />
-        <span style={{ fontFamily: SANS }}>3D 波动率曲面</span>
+        掌握市场先机
       </div>
+    </div>
+  </AbsoluteFill>
+);
+
+/** 4:3 cover (1440×1080): title block on top, the same surface filling the lower half. */
+const W43 = 1440;
+const POSE_43 = { ...POSE, r: 3.15, target: [0.12, 0.46, -0.1] as [number, number, number] };
+const STATE_43: SceneState = { ...STATE, camera: cameraAt(0, [POSE_43, { ...POSE_43, t: 1 }]) };
+
+export const OpenVlabSurfCover43: React.FC = () => (
+  <AbsoluteFill style={{ background: "#050608", fontFamily: SANS, overflow: "hidden" }}>
+    <AbsoluteFill style={{ background: "radial-gradient(ellipse 65% 50% at 55% 70%, rgba(176,113,232,0.16) 0%, rgba(5,6,8,0) 70%)" }} />
+    <SurfaceCanvas state={STATE_43} width={W43} height={1080} />
+    {/* top fade so the title reads; vignette on the frame edges */}
+    <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(5,6,8,0.96) 0px, rgba(5,6,8,0.85) 420px, rgba(5,6,8,0) 640px)" }} />
+    <AbsoluteFill style={{ background: "radial-gradient(ellipse 85% 85% at 50% 55%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.55) 100%)" }} />
+
+    <div style={{ position: "absolute", left: 96, top: 80, display: "flex", alignItems: "center", gap: 18 }}>
+      <BrandMark size={56} src="openvlab-market/logo.svg" />
+      <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: "-0.035em", color: C.ink, lineHeight: 1 }}>OpenVlab</div>
+    </div>
+
+    <div style={{ position: "absolute", left: 96, top: 210, fontSize: 132, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1.08, color: C.ink, whiteSpace: "nowrap" }}>
+      看懂 3D 曲面
+      <br />
+      掌握市场先机
     </div>
   </AbsoluteFill>
 );
