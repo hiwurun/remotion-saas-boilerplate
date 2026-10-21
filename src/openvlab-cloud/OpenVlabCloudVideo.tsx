@@ -17,9 +17,9 @@ import { GW, GH, ShotFall, ShotSpeed, T } from "./scenes";
 export const FPS = 60;
 export const W = 1920;
 export const H = 1080;
-export const TOTAL = Math.round(38.41 * FPS);
+export const TOTAL = Math.round(35.49 * FPS);
 const BGM = "openvlab-surf/bgm-vlog-beat.mp3";
-const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 30.03, swap: 32.81, s7: 35.66 };
+const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 30.03, s7: 32.74 };
 
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", monospace`;
@@ -396,13 +396,25 @@ const CardStream: React.FC<{ t: number }> = ({ t }) => {
   }
   return <AbsoluteFill>{items}</AbsoluteFill>;
 };
-const Typed: React.FC<{ text: string; t: number; t0: number; cps: number }> = ({ text, t, t0, cps }) => {
+/** zero-width caret slot so the line width never changes */
+const Caret: React.FC<{ o: number }> = ({ o }) => (
+  <span style={{ display: "inline-block", width: 0, height: 50, position: "relative" }}><span style={{ position: "absolute", left: 10, top: 0, width: 26, height: 50, background: WHITE, opacity: o }} /></span>
+);
+const Typed: React.FC<{ text: string; t: number; t0: number; cps: number; soft?: boolean }> = ({ text, t, t0, cps, soft }) => {
   const n = Math.min(text.length, Math.floor((t - t0) * cps) + 1);
   const on = n < text.length || Math.floor((t - t0) * 2.4) % 2 === 0;
+  const cur = soft ? smooth(t, t0 - 0.35, t0) : 1; // cursor eases in before the first glyph
   return (
     <div style={{ fontFamily: MONO, fontSize: 46, color: WHITE, letterSpacing: 6, display: "flex", alignItems: "center", whiteSpace: "pre" }}>
-      {text.slice(0, n)}
-      <span style={{ display: "inline-block", width: 26, height: 50, marginLeft: 6, background: WHITE, opacity: on ? 1 : 0 }} />
+      {soft ? null : text.slice(0, n)}
+      {soft ? [...text].map((ch, i) => {
+        // constant line width (no re-centring jumps): glyphs fade + rise in place, cursor rides after the last shown glyph
+        const k = smooth(t, t0 + i / cps, t0 + i / cps + 0.28);
+        const g = <span key={i} style={{ display: "inline-block", opacity: k, transform: `translateY(${(1 - k) * 8}px)` }}>{ch}</span>;
+        return i === Math.max(0, n) ? [<Caret key="c" o={(on ? 1 : 0) * cur} />, g] : g;
+      }) : null}
+      {soft && n >= text.length ? <Caret o={(on ? 1 : 0) * cur} /> : null}
+      {soft ? <span style={{ display: "inline-block", width: 36 }} /> : <span style={{ display: "inline-block", width: 26, height: 50, marginLeft: 6, background: WHITE, opacity: on ? 1 : 0 }} />}
     </div>
   );
 };
@@ -415,7 +427,7 @@ export const OpenVlabCloudVideo: React.FC = () => {
     body = <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}><div style={{ fontFamily: MONO, fontSize: 46, color: WHITE, letterSpacing: 8 }}>一屏看完全市场隐波</div></AbsoluteFill>;
   else if (t < S.s5) body = <CardStream t={t} />;
   else if (t < T.s6) body = <ShotFall t={t} />;
-  else if (t < T.s7) body = <ShotSpeed t={t} />;
+  else if (t < T.s7) body = <AbsoluteFill style={{ opacity: 1 - smooth(t, T.s7 - 0.5, T.s7) }}><ShotSpeed t={t} /></AbsoluteFill>;
   else if (t < S.s7)
     body = (
       <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
@@ -423,14 +435,14 @@ export const OpenVlabCloudVideo: React.FC = () => {
           const x = (rnd(i) * W + (t - S.s6) * (6 + rnd(i + 9) * 10)) % W;
           const y = (rnd(i + 3) * H - (t - S.s6) * (3 + rnd(i + 5) * 6) + H) % H;
           const s = 1 + rnd(i + 2) * 1.6;
-          return <div key={i} style={{ position: "absolute", left: x, top: y, width: s, height: s, borderRadius: "50%", background: "#fff", opacity: 0.18 + rnd(i + 4) * 0.35 }} />;
+          return <div key={i} style={{ position: "absolute", left: x, top: y, width: s, height: s, borderRadius: "50%", background: "#fff", opacity: (0.18 + rnd(i + 4) * 0.35) * (1 - smooth(t, S.s7 - 0.45, S.s7)) }} />;
         })}
-        {t < S.swap ? <Typed text="波动率云图" t={t} t0={S.s6 + 0.12} cps={9} /> : <Typed text="OPENVLAB.CN" t={t} t0={S.swap} cps={9} />}
+        <div style={{ opacity: 1 - smooth(t, S.s7 - 0.45, S.s7), transform: `translateY(${-6 * smooth(t, S.s7 - 0.45, S.s7)}px)` }}><Typed text="波动率云图" t={t} t0={S.s6 + 0.45} cps={6} soft /></div>
       </AbsoluteFill>
     );
   else
     body = (
-      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", flexDirection: "row", gap: 24 }}>
+      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", flexDirection: "row", gap: 24, opacity: smooth(t, S.s7, S.s7 + 0.6), transform: `translateY(${8 * (1 - smooth(t, S.s7, S.s7 + 0.7))}px)` }}>
         <BrandMark size={66} src="openvlab-market/logo.svg" />
         <div style={{ fontFamily: SANS, fontSize: 54, fontWeight: 600, color: WHITE, letterSpacing: -0.5 }}>OpenVlab</div>
       </AbsoluteFill>
