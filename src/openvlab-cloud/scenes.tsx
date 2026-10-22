@@ -14,7 +14,7 @@ import cloudClose from "./data/surfacemap-close.json";
 export const W = 1920, H = 1080;
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", monospace`;
-export const T = { s4: 10.66, s5: 15.44, s6: 20.65, s7: 30.03 };
+export const T = { s4: 10.66, s5: 15.44, s6: 20.65, s7: 31.28, end: 33.98 };
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const sm = (t: number, a: number, b: number) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
@@ -232,13 +232,15 @@ export const ShotSpeed: React.FC<{ t: number }> = ({ t }) => {
   const t0 = T.s6;
   const pl: Placed = { ...LH, x: 0, y: 0 };
   const enter = 1; // no entrance: the card arrives via the push-in at the end of ShotFall (match cut)
-  const slide = io(t, t0 + 2.55, t0 + 3.4);
+  const fadeOut = sm(t, T.s7 - 1.45, T.s7 - 0.95); // chart, braces, connectors, highlights leave
+  const back = io(t, T.s7 - 1.15, T.s7 - 0.1); // card returns to centre → ShotPull picks it up
+  const slide = io(t, t0 + 2.55, t0 + 3.4) * (1 - back);
   const sc0 = Math.min(1150 / pl.w, 600 / CARD_H), sc1 = Math.min(560 / pl.w, 560 / CARD_H);
   const S = lerp(sc0 * lerp(0.96, 1, enter), sc1, slide);
   const ccx = lerp(W / 2, 400, slide), ccy = H / 2;
   const hiAt = (row: number) => t0 + 0.95 + (row - 1) * 0.22; // 20P..20C one by one
   const lit = (row: number) => sm(t, hiAt(row), hiAt(row) + 0.18);
-  const reveal: Reveal = { cell: (mi, row) => (mi === 0 && row > 0 ? Math.min(1, 1 - 0.65 * sm(t, t0 + 0.35, t0 + 0.85) + 0.65 * lit(row)) : 1 - 0.8 * sm(t, t0 + 0.9, t0 + 1.3)), outline: () => 0 };
+  const reveal: Reveal = { cell: (mi, row) => (mi === 0 && row > 0 ? Math.min(1, 1 - 0.65 * sm(t, t0 + 0.35, t0 + 0.85) + 0.65 * lit(row)) : 1 - 0.8 * sm(t, t0 + 0.9, t0 + 1.3) * (1 - back)), outline: () => 0 };
   // chart panel (right)
   const PS = 1.28, PX = W - 60 - (CHW + 2) * PS, PY = (H - (CHH + 70) * PS) / 2;
   const chartIn = io(t, t0 + 2.9, t0 + 3.6);
@@ -254,17 +256,17 @@ export const ShotSpeed: React.FC<{ t: number }> = ({ t }) => {
     return { d: `M${a.x},${a.y} C${mx},${a.y} ${mx},${by} ${bx - 2},${by}`, k, a };
   });
   return (
-    <AbsoluteFill style={{ background: "#000" }}>
+    <AbsoluteFill>
       {/* card */}
       <div style={{ position: "absolute", left: ccx, top: ccy, width: 0, height: 0 }}>
         <div style={{ position: "absolute", left: -pl.w / 2, top: -CARD_H / 2, width: pl.w, height: CARD_H, transformOrigin: "50% 50%", transform: `translateY(${(1 - enter) * 40}px) scale(${S})`, opacity: enter }}>
           <Card pl={pl} reveal={reveal} borders={0} />
-          {SMILE_X.map((_, i) => { const c = cellCenter(pl, 0, i + 1); const o = lit(i + 1); return o > 0.01 ? <div key={i} style={{ position: "absolute", left: c.x - L.col / 2, top: c.y - L.row / 2, width: L.col, height: L.row, borderRadius: 3, border: "1px solid rgba(255,255,255,0.9)", opacity: o, boxSizing: "border-box" }} /> : null; })}
+          {SMILE_X.map((_, i) => { const c = cellCenter(pl, 0, i + 1); const o = lit(i + 1) * (1 - fadeOut); return o > 0.01 ? <div key={i} style={{ position: "absolute", left: c.x - L.col / 2, top: c.y - L.row / 2, width: L.col, height: L.row, borderRadius: 3, border: "1px solid rgba(255,255,255,0.9)", opacity: o, boxSizing: "border-box" }} /> : null; })}
         </div>
       </div>
       {/* smile panel: VolChartCard-style surface */}
-      {chartIn > 0.01 ? (
-        <div style={{ position: "absolute", left: PX, top: PY, width: CHW + 2, opacity: chartIn, transformOrigin: "0 0", transform: `translateX(${(1 - chartIn) * 40}px) scale(${PS})`, background: DARK.popover, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, fontFamily: SANS, color: DARK.text }}>
+      {chartIn * (1 - fadeOut) > 0.01 ? (
+        <div style={{ position: "absolute", left: PX, top: PY, width: CHW + 2, opacity: chartIn * (1 - fadeOut), transformOrigin: "0 0", transform: `translateX(${(1 - chartIn) * 40 + fadeOut * 30}px) scale(${PS})`, background: DARK.popover, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, fontFamily: SANS, color: DARK.text }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "16px 20px 0", height: 46, boxSizing: "border-box" }}>
             <span style={{ fontSize: 18, fontWeight: 600 }}>{LH.p.name} <span style={{ textDecoration: "underline", textUnderlineOffset: 3, fontWeight: 500 }}>{LH_M.exp.slice(2)}</span></span>
             <span style={{ fontSize: 13, color: DARK.muted }}>{String(LH_E.last_time)}</span>
@@ -280,7 +282,7 @@ export const ShotSpeed: React.FC<{ t: number }> = ({ t }) => {
         </div>
       ) : null}
       {/* connectors */}
-      <svg width={W} height={H} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      <svg width={W} height={H} style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 1 - fadeOut }}>
         {conn.map((c, i) => c.k > 0 ? (
           <g key={i}>
             <path d={c.d} fill="none" stroke="#ffffff" strokeOpacity={0.14} strokeWidth={7} strokeLinecap="round" pathLength={1} strokeDasharray={`${c.k} 1`} />
@@ -290,6 +292,49 @@ export const ShotSpeed: React.FC<{ t: number }> = ({ t }) => {
           </g>
         ) : null)}
       </svg>
+    </AbsoluteFill>
+  );
+};
+
+/* ---------------- C · pull back from the IM card to the whole cloud map (30.03 →): reverse of ShotFall's push-in ---------------- */
+const PULL_Z = Math.min(1780 / GW, 1000 / GH); // whole wall, centred
+const PULL_DUR = 1.6;
+const imCtr = { x: IM_WALL.x + IM_WALL.w / 2, y: IM_WALL.y + CARD_H / 2 };
+const pullState = (t: number) => {
+  const e = io(t, T.s7, T.s7 + PULL_DUR);
+  const z = lerpLog(Math.min(1150 / LH.w, 600 / CARD_H), PULL_Z, e);
+  const o = { x: (imCtr.x - GW / 2) * PULL_Z * e, y: (imCtr.y - GH / 2) * PULL_Z * e }; // IM screen offset from centre: straight path to its slot
+  return { e, z, o };
+};
+/** all 83 other cards, rendered once at the panorama scale (layer only ever scales ≤ 1 → crisp), premounted before the cut */
+const PANO = GRID.filter((g) => g.p.code !== "MO").map((g) => ({ g, local: { ...g, x: 0, y: 0 } })); // stable props → StaticCard memo holds
+const PanoWall = React.memo(({ n }: { n: number }) => (
+  <div style={{ position: "absolute", left: 0, top: 0, zoom: PULL_Z } as React.CSSProperties}>
+    {PANO.slice(0, n).map(({ g, local }) => (
+      <div key={g.p.code} style={{ position: "absolute", left: g.x, top: g.y, width: g.w, height: CARD_H }}>
+        <StaticCard pl={local} borders={0} />
+      </div>
+    ))}
+  </div>
+));
+export const PullWallLayer: React.FC<{ t: number }> = ({ t }) => {
+  const { z, o } = pullState(t);
+  const op = sm(t, T.s7 + 0.25, T.s7 + 1.25);
+  return (
+    <div style={{ position: "absolute", left: 0, top: 0, opacity: op, visibility: op > 0 ? "visible" : "hidden", transformOrigin: "0 0", willChange: "transform, opacity", transform: `translate(${W / 2 + o.x - imCtr.x * z}px, ${H / 2 + o.y - imCtr.y * z}px) scale(${z / PULL_Z})` }}>
+      <PanoWall n={Math.max(0, Math.min(PANO.length, Math.floor((t - (T.s7 - 2.6)) * 120)))} />
+    </div>
+  );
+};
+/** IM card (closing data, as in ShotSpeed) shrinking into its slot; wall stays clear, then fades to black into the lockup */
+export const ShotPull: React.FC<{ t: number }> = ({ t }) => {
+  const { z, o } = pullState(t);
+  return (
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: W / 2 + o.x, top: H / 2 + o.y, width: 0, height: 0, transformOrigin: "0 0", transform: `scale(${z})` }}>
+        <ImPair xf={1} />
+      </div>
+      <AbsoluteFill style={{ background: "#000", opacity: sm(t, T.end - 0.55, T.end) }} />
     </AbsoluteFill>
   );
 };

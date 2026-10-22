@@ -7,7 +7,7 @@ import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { CARD_H, GRID, L, Placed, Product, PRODUCTS } from "./data";
 import { D, diffBg } from "./styles";
 import { StaticCard } from "./Card";
-import { GW, GH, ShotFall, ShotSpeed, T } from "./scenes";
+import { GW, GH, PullWallLayer, ShotFall, ShotPull, ShotSpeed, T } from "./scenes";
 
 /**
  * Shot-for-shot structure of Linear "Introducing Linear Releases" (29.0s).
@@ -17,9 +17,9 @@ import { GW, GH, ShotFall, ShotSpeed, T } from "./scenes";
 export const FPS = 60;
 export const W = 1920;
 export const H = 1080;
-export const TOTAL = Math.round(35.49 * FPS);
+export const TOTAL = Math.round(36.70 * FPS);
 const BGM = "openvlab-surf/bgm-vlog-beat.mp3";
-const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s6: 30.03, s7: 32.74 };
+const S = { s2: 4.78, s3: 8.78, s4: 10.66, s5: 15.44, s7: 33.98 };
 
 const jb = loadFont("normal", { weights: ["400", "500"], subsets: ["latin"] }).fontFamily;
 const MONO = `${jb}, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", monospace`;
@@ -351,24 +351,35 @@ const LodCard = React.memo(({ pl }: { pl: Placed }) => (
 /** opening stream unchanged; from TILE_T each card gradually flattens into its wall tile, then the tiled wall shrinks onto ShotFall's layout (z 0.38, shifted −372px) at S.s5 */
 const TILE_T = 12.9;
 const GRID_OF = new Map(GRID.map((g) => [g.p.code, g]));
-const IN_STREAM = new Set(STREAM.map((s) => s.p.code));
-const CardStream: React.FC<{ t: number }> = ({ t }) => {
+/** the 44 wall cards that were not in the stream: one static subtree (rendered once), moved/faded as a single layer */
+const OTHERS = GRID.filter((g) => !STREAM.some((p) => p.p.code === g.p.code)).map((g) => ({ g, local: { ...g, x: 0, y: 0 } }));
+const OthersStatic = React.memo(({ n }: { n: number }) => (
+  <>
+    {OTHERS.slice(0, n).map(({ g, local }) => (
+      <div key={g.p.code} style={{ position: "absolute", left: g.x, top: g.y, width: g.w, height: CARD_H }}>
+        <StaticCard pl={local} borders={0} />
+      </div>
+    ))}
+  </>
+));
+const tileCam = (t: number) => {
   const zk = io3(t, TILE_T + 0.7, S.s5 - 0.1);
-  const zW = Math.exp(Math.log(0.62) + (Math.log(0.38) - Math.log(0.62)) * zk), shift = -372 * zk;
+  return { zW: Math.exp(Math.log(0.62) + (Math.log(0.38) - Math.log(0.62)) * zk), shift: -372 * zk };
+};
+/** premounted from the title shot (hidden) so the 44 cards never mount mid-transition */
+const OthersLayer: React.FC<{ t: number }> = ({ t }) => {
+  const { zW, shift } = tileCam(t);
+  const op = io3(t, TILE_T + 0.3, TILE_T + 1.3);
+  return (
+    <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", willChange: "transform, opacity", opacity: op, visibility: op > 0 ? "visible" : "hidden", transform: `translate(${W / 2 + shift - (GW / 2) * zW}px, ${H / 2 - (GH / 2) * zW}px) scale(${zW})` }}>
+      <OthersStatic n={Math.max(0, Math.min(OTHERS.length, Math.floor((t - 9.45) * 120)))} />
+    </div>
+  );
+};
+const CardStream: React.FC<{ t: number }> = ({ t }) => {
+  const { zW, shift } = tileCam(t);
   const tile = (code: string) => { const g = GRID_OF.get(code)!; return { X: W / 2 + shift + (g.x + g.w / 2 - GW / 2) * zW, Y: H / 2 + (g.y + CARD_H / 2 - GH / 2) * zW }; };
   const items: React.ReactNode[] = [];
-  // wall cards that were never in the stream fade in at their tiles (behind)
-  const others = io3(t, TILE_T + 0.3, TILE_T + 1.3);
-  if (others > 0) for (const g of GRID) {
-    if (IN_STREAM.has(g.p.code)) continue;
-    const { X, Y } = tile(g.p.code);
-    if (X + g.w * zW < 0 || X - g.w * zW > W || Y + CARD_H * zW < 0 || Y - CARD_H * zW > H) continue;
-    items.push(
-      <div key={g.p.code} style={{ position: "absolute", left: 0, top: 0, opacity: others, transform: `translate(${X}px, ${Y}px) scale(${zW}) translate(-50%, -50%)`, transformOrigin: "0 0", width: g.w, height: CARD_H }}>
-        <StaticCard pl={{ ...g, x: 0, y: 0 }} borders={0} />
-      </div>,
-    );
-  }
   for (let i = STREAM.length - 1; i >= 0; i--) {
     const te = S.s4 + 0.05 + i * 0.07;
     const k = outCubic(t, te, te + 0.95);
@@ -389,96 +400,73 @@ const CardStream: React.FC<{ t: number }> = ({ t }) => {
     const rot = 1 - b;
     items.push(
       <div key={pl.p.code} style={{ position: "absolute", left: 0, top: 0, opacity: b > 0 ? 1 : Math.min(1, k * 2), transform: `translate(${X}px, ${Y}px) scale(${sc}) perspective(1400px) rotateX(${10 * rot}deg) rotateY(${-9 * rot}deg) translate(-50%, -50%)`, transformOrigin: "0 0", willChange: "transform", width: pl.w, height: CARD_H }}>
-        {sc < 0.75 && b < 0.5 ? <LodCard pl={pl} /> : <StaticCard pl={pl} borders={b > 0 ? 0 : undefined} />}
+        {/* full card stays mounted (hidden while the LOD is shown) so the LOD→full swap never mounts a card mid-transition */}
+        {sc < 0.75 && b < 0.5 ? <LodCard pl={pl} /> : null}
+        <div style={{ position: "absolute", inset: 0, visibility: sc < 0.75 && b < 0.5 ? "hidden" : "visible" }}><StaticCard pl={pl} borders={b > 0 ? 0 : undefined} /></div>
         {bl > 0.05 ? <div style={{ position: "absolute", inset: 0, borderRadius: 6, background: "#000", opacity: 1 - fo(bl) }} /> : null}
       </div>,
     );
   }
   return <AbsoluteFill>{items}</AbsoluteFill>;
 };
-/** zero-width caret slot so the line width never changes */
-const Caret: React.FC<{ o: number }> = ({ o }) => (
-  <span style={{ display: "inline-block", width: 0, height: 50, position: "relative" }}><span style={{ position: "absolute", left: 10, top: 0, width: 26, height: 50, background: WHITE, opacity: o }} /></span>
-);
-/* ---------------- shot 2 → 3: the market card turns away like a page (hinge on the left edge), revealing the title beneath ---------------- */
 const FLIP = { t0: 8.78, t1: 9.4 };
+const PageContent = React.memo(() => <CardLayer c={MARKET_CARD} cam={pullCam(8)} t={FLIP.t0} idx={0} o={{ cardOp: 1, titleOp: 1, exitOp: 1 }} />);
 const PageTurn: React.FC<{ t: number }> = ({ t }) => {
   const x = Math.max(0, Math.min(1, (t - FLIP.t0) / (FLIP.t1 - FLIP.t0)));
   const e = x * x * (2.2 - 1.2 * x); // lifts gently, then accelerates through the turn
   const ang = 100 * e;
   if (x >= 1 || ang >= 90) return null; // edge-on → gone (no back face); title is already flat underneath
+  const pre = t < FLIP.t0; // premounted (hidden) during the static end of the market shot
   return (
-    <AbsoluteFill style={{ perspective: 2200, perspectiveOrigin: "0% 50%" }}>
+    <AbsoluteFill style={{ perspective: 2200, perspectiveOrigin: "0% 50%", visibility: pre ? "hidden" : "visible" }}>
       <AbsoluteFill style={{ transformOrigin: "0% 50%", transform: `rotateY(${ang}deg)`, backfaceVisibility: "hidden", background: "#000", willChange: "transform" }}>
-        {/* page = the last frame of the market shot (camera is locked from 8s) */}
-        <CardLayer c={MARKET_CARD} cam={pullCam(8)} t={FLIP.t0} idx={0} o={{ cardOp: 1, titleOp: 1, exitOp: 1 }} />
+        <PageContent />
         <AbsoluteFill style={{ background: "#000", opacity: 0.65 * e }} />
       </AbsoluteFill>
     </AbsoluteFill>
   );
 };
-const Typed: React.FC<{ text: string; t: number; t0: number; cps: number; soft?: boolean }> = ({ text, t, t0, cps, soft }) => {
-  const n = Math.min(text.length, Math.floor((t - t0) * cps) + 1);
-  const on = n < text.length || Math.floor((t - t0) * 2.4) % 2 === 0;
-  const cur = soft ? smooth(t, t0 - 0.35, t0) : 1; // cursor eases in before the first glyph
-  return (
-    <div style={{ fontFamily: MONO, fontSize: 46, color: WHITE, letterSpacing: 6, display: "flex", alignItems: "center", whiteSpace: "pre" }}>
-      {soft ? null : text.slice(0, n)}
-      {soft ? [...text].map((ch, i) => {
-        // constant line width (no re-centring jumps): glyphs fade + rise in place, cursor rides after the last shown glyph
-        const k = smooth(t, t0 + i / cps, t0 + i / cps + 0.28);
-        const g = <span key={i} style={{ display: "inline-block", opacity: k, transform: `translateY(${(1 - k) * 8}px)` }}>{ch}</span>;
-        return i === Math.max(0, n) ? [<Caret key="c" o={(on ? 1 : 0) * cur} />, g] : g;
-      }) : null}
-      {soft && n >= text.length ? <Caret o={(on ? 1 : 0) * cur} /> : null}
-      {soft ? <span style={{ display: "inline-block", width: 36 }} /> : <span style={{ display: "inline-block", width: 26, height: 50, marginLeft: 6, background: WHITE, opacity: on ? 1 : 0 }} />}
-    </div>
-  );
-};
 
-export const OpenVlabCloudVideo: React.FC = () => {
-  const t = useCurrentFrame() / FPS;
+export const OpenVlabCloudVideo: React.FC = () => <CloudFrame t={useCurrentFrame() / FPS} audio />;
+/** one frame of the video at time t (separate from useCurrentFrame so it can be profiled outside Remotion) */
+export const CloudFrame: React.FC<{ t: number; audio?: boolean }> = ({ t, audio }) => {
   let body: React.ReactNode = null;
   if (t < S.s3) body = <CardLayer c={MARKET_CARD} cam={pullCam(t)} t={t} idx={0} o={{ cardOp: smooth(t, 3.9, 5.4), titleOp: smooth(t, 4.2, 5.2), exitOp: smooth(t, 4.8, 6.0) }} />;
   else if (t < S.s4)
     body = (
       <AbsoluteFill>
         <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}><div style={{ fontFamily: MONO, fontSize: 46, color: WHITE, letterSpacing: 8 }}>一屏看完全市场隐波</div></AbsoluteFill>
-        <PageTurn t={t} />
       </AbsoluteFill>
     );
   else if (t < S.s5) body = <CardStream t={t} />;
   else if (t < T.s6) body = <ShotFall t={t} />;
-  else if (t < T.s7) body = <AbsoluteFill style={{ opacity: 1 - smooth(t, T.s7 - 0.5, T.s7) }}><ShotSpeed t={t} /></AbsoluteFill>;
-  else if (t < S.s7)
-    body = (
-      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
-        {Array.from({ length: 34 }).map((_, i) => {
-          const x = (rnd(i) * W + (t - S.s6) * (6 + rnd(i + 9) * 10)) % W;
-          const y = (rnd(i + 3) * H - (t - S.s6) * (3 + rnd(i + 5) * 6) + H) % H;
-          const s = 1 + rnd(i + 2) * 1.6;
-          return <div key={i} style={{ position: "absolute", left: x, top: y, width: s, height: s, borderRadius: "50%", background: "#fff", opacity: (0.18 + rnd(i + 4) * 0.35) * (1 - smooth(t, S.s7 - 0.45, S.s7)) }} />;
-        })}
-        <div style={{ opacity: 1 - smooth(t, S.s7 - 0.45, S.s7), transform: `translateY(${-6 * smooth(t, S.s7 - 0.45, S.s7)}px)` }}><Typed text="波动率云图" t={t} t0={S.s6 + 0.45} cps={6} soft /></div>
-      </AbsoluteFill>
-    );
-  else
-    body = (
-      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", flexDirection: "row", gap: 24, opacity: smooth(t, S.s7, S.s7 + 0.6), transform: `translateY(${8 * (1 - smooth(t, S.s7, S.s7 + 0.7))}px)` }}>
-        <BrandMark size={66} src="openvlab-market/logo.svg" />
-        <div style={{ fontFamily: SANS, fontSize: 54, fontWeight: 600, color: WHITE, letterSpacing: -0.5 }}>OpenVlab</div>
-      </AbsoluteFill>
-    );
+  else if (t < T.s7) body = <ShotSpeed t={t} />;
   return (
     <AbsoluteFill
       style={{
         background: "#000",
         overflow: "hidden",
-        scale: 1.005
+        scale: 1.005,
+        translate: "-1px 0px"
       }}
     >
-      <Audio src={staticFile(BGM)} volume={(f) => interpolate(f, [0, 0.8 * FPS, TOTAL - 1.6 * FPS, TOTAL - 1], [0, 0.8, 0.8, 0], CLAMP)} />
+      {audio ? <Audio src={staticFile(BGM)} volume={(f) => interpolate(f, [0, 0.8 * FPS, TOTAL - 1.6 * FPS, TOTAL - 1], [0, 0.8, 0.8, 0], CLAMP)} /> : null}
+      {/* persistent slots: premounted (hidden / progressively) during static moments so nothing heavy mounts mid-motion */}
+      {t >= T.s7 - 2.7 && t < S.s7 ? <AbsoluteFill key="pullwall"><PullWallLayer t={t} /></AbsoluteFill> : null}
+      {t >= T.s7 - 2.7 && t < S.s7 ? <AbsoluteFill key="pull" style={{ visibility: t < T.s7 ? "hidden" : "visible" }}><ShotPull t={Math.max(t, T.s7)} /></AbsoluteFill> : null}
+      {t >= S.s3 && t < S.s5 ? <AbsoluteFill key="others"><OthersLayer t={t} /></AbsoluteFill> : null}
       {body}
+      {t >= 8.3 && t < FLIP.t1 ? <PageTurn key="page" t={t} /> : null}
+      {t >= S.s7 - 1 ? (
+        <AbsoluteFill key="lockup" style={{ justifyContent: "center", alignItems: "center", flexDirection: "row", gap: 24, opacity: smooth(t, S.s7, S.s7 + 0.6), transform: `translateY(${8 * (1 - smooth(t, S.s7, S.s7 + 0.7))}px)` }}>
+          <BrandMark size={66} src="openvlab-market/logo.svg" />
+          <div style={{ display: "flex", flexDirection: "row", alignItems: "baseline", gap: 18 }}>
+            <div style={{ fontFamily: SANS, fontSize: 54, fontWeight: 600, color: WHITE, letterSpacing: -0.5 }}>OpenVlab</div>
+            <div style={{ fontFamily: SANS, fontSize: 28, fontWeight: 400, color: "rgba(255,255,255,0.35)", letterSpacing: 0, transform: "translateY(-2px)" }}>·</div>
+            <div style={{ fontFamily: MONO, fontSize: 32, fontWeight: 500, color: "rgba(255,255,255,0.78)", letterSpacing: 10, opacity: smooth(t, S.s7 + 0.25, S.s7 + 0.85) }}>波动率云图</div>
+          </div>
+        </AbsoluteFill>
+      ) : null}
     </AbsoluteFill>
   );
 };
