@@ -7,7 +7,7 @@ import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { CARD_H, GRID, L, Placed, Product, PRODUCTS } from "./data";
 import { D, diffBg } from "./styles";
 import { StaticCard } from "./Card";
-import { GW, GH, PullWallLayer, ShotFall, ShotPull, ShotSpeed, T } from "./scenes";
+import { GW, GH, FallWallLayer, PullWallLayer, ShotFall, ShotPull, ShotSpeed, T } from "./scenes";
 
 /**
  * Shot-for-shot structure of Linear "Introducing Linear Releases" (29.0s).
@@ -371,7 +371,7 @@ const OthersLayer: React.FC<{ t: number }> = ({ t }) => {
   const { zW, shift } = tileCam(t);
   const op = io3(t, TILE_T + 0.3, TILE_T + 1.3);
   return (
-    <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", willChange: "transform, opacity", opacity: op, visibility: op > 0 ? "visible" : "hidden", transform: `translate(${W / 2 + shift - (GW / 2) * zW}px, ${H / 2 - (GH / 2) * zW}px) scale(${zW})` }}>
+    <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", willChange: "transform, opacity", opacity: op, transform: `translate(${W / 2 + shift - (GW / 2) * zW}px, ${H / 2 - (GH / 2) * zW}px) scale(${zW})` }}>
       <OthersStatic n={Math.max(0, Math.min(OTHERS.length, Math.floor((t - 9.45) * 120)))} />
     </div>
   );
@@ -453,8 +453,9 @@ export const CloudFrame: React.FC<{ t: number; audio?: boolean }> = ({ t, audio 
       {audio ? <Audio src={staticFile(BGM)} volume={(f) => interpolate(f, [0, 0.8 * FPS, TOTAL - 1.6 * FPS, TOTAL - 1], [0, 0.8, 0.8, 0], CLAMP)} /> : null}
       {/* persistent slots: premounted (hidden / progressively) during static moments so nothing heavy mounts mid-motion */}
       {t >= T.s7 - 2.7 && t < S.s7 ? <AbsoluteFill key="pullwall"><PullWallLayer t={t} /></AbsoluteFill> : null}
-      {t >= T.s7 - 2.7 && t < S.s7 ? <AbsoluteFill key="pull" style={{ visibility: t < T.s7 ? "hidden" : "visible" }}><ShotPull t={Math.max(t, T.s7)} /></AbsoluteFill> : null}
+      {t >= T.s7 - 2.7 && t < S.s7 ? <AbsoluteFill key="pull" style={{ opacity: t < T.s7 ? 0 : 1 }}><ShotPull t={Math.max(t, T.s7)} /></AbsoluteFill> : null}
       {t >= S.s3 && t < S.s5 ? <AbsoluteFill key="others"><OthersLayer t={t} /></AbsoluteFill> : null}
+      {t >= S.s5 - 2.2 && t < T.s6 - 2.1 ? <AbsoluteFill key="fallwall"><FallWallLayer t={t} /></AbsoluteFill> : null}
       {body}
       {t >= 8.3 && t < FLIP.t1 ? <PageTurn key="page" t={t} /> : null}
       {t >= S.s7 - 1 ? (

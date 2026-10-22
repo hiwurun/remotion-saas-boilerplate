@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill } from "remotion";
 import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
 import { SANS } from "../shared/fonts";
-import { Card, Mode, Reveal, StaticCard } from "./Card";
+import { Card, Reveal, StaticCard } from "./Card";
 import { CARD_H, cardW, cellCenter, GRID, L, parseProducts, Placed } from "./data";
 import { D, withA } from "./styles";
 import * as echarts from "echarts";
@@ -22,43 +22,6 @@ const io = (t: number, a: number, b: number) => { const x = clamp01((t - a) / (b
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 const lerpLog = (a: number, b: number, k: number) => Math.exp(lerp(Math.log(a), Math.log(b), k));
 
-/* ---------------- shared wall (real product cards on a camera) ---------------- */
-type CamS = { cx: number; cy: number; z: number; aperture?: number };
-type WallCard = { pl: Placed; op?: number; mode?: Mode; borders?: number; desc?: boolean; ring?: number; reveal?: Reveal; dx?: number; dy?: number };
-const BQ = [0, 1.5, 3.5, 7];
-const q = (b: number) => BQ.reduce((best, v) => (Math.abs(v - b) < Math.abs(best - b) ? v : best), 0);
-const Wall: React.FC<{ cam: CamS; cards: WallCard[]; overlay?: React.ReactNode; dim?: number }> = ({ cam, cards, overlay, dim = 0 }) => {
-  const { cx, cy, z, aperture = 0 } = cam;
-  return (
-    <AbsoluteFill style={{ opacity: 1 - dim }}>
-      <div style={{ position: "absolute", left: W / 2, top: H / 2, width: 0, height: 0, perspective: 1700 }}>
-        <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", transform: `translate(${-cx * z}px, ${-cy * z}px)` }}>
-          <div style={{ position: "absolute", left: 0, top: 0, zoom: z } as React.CSSProperties}>
-            {cards.map((c) => {
-              const x = c.pl.x + (c.dx ?? 0), y = c.pl.y + (c.dy ?? 0);
-              const sx = (x + c.pl.w / 2 - cx) * z, sy = (y + CARD_H / 2 - cy) * z;
-              if (Math.abs(sx) - (c.pl.w * z) / 2 > W * 0.62 || Math.abs(sy) - (CARD_H * z) / 2 > H * 0.7) return null;
-              if ((c.op ?? 1) <= 0.01) return null;
-              const b = q(Math.min(7, (aperture * Math.max(0, Math.hypot(sx, sy) - 260)) / 400));
-              const local: Placed = { ...c.pl, x: 0, y: 0 };
-              return (
-                <div key={c.pl.p.code} style={{ position: "absolute", left: x, top: y, width: c.pl.w, height: CARD_H, opacity: c.op ?? 1 }}>
-                  {c.reveal ? <Card pl={local} reveal={c.reveal} mode={c.mode} borders={c.borders} desc={c.desc} ring={c.ring} /> : <StaticCard pl={local} mode={c.mode} borders={c.borders} desc={c.desc} ring={c.ring} />}
-                  {b ? <div style={{ position: "absolute", inset: 0, borderRadius: 6, background: "#000", opacity: 1 - 1 / (1 + 0.11 * b) }} /> : null}
-                </div>
-              );
-            })}
-            {overlay}
-          </div>
-        </div>
-      </div>
-    </AbsoluteFill>
-  );
-};
-
-
-const allCards = (f?: (g: Placed) => Partial<WallCard>): WallCard[] => GRID.map((g) => ({ pl: g, ...(f ? f(g) : {}) }));
-
 /* ---------------- facts derived from the data ---------------- */
 export const GW = Math.max(...GRID.map((g) => g.x + g.w)), GH = Math.max(...GRID.map((g) => g.y + CARD_H));
 const mainM = (p: Placed["p"]) => p.months.find((m) => m.exp === p.exp) ?? p.months[0];
@@ -71,11 +34,12 @@ const FALL_T0 = 15.9, FALL_DT = 0.07; // item i lights at FALL_T0 + i * FALL_DT 
 const fallAt = new Map(FALL_LIST.map((f, i) => [f.code, FALL_T0 + i * FALL_DT]));
 /** frozen end-state of the wall (all 84 lit/dimmed as at the end of the list), IM excluded; rendered once, moved by one transform */
 const FROZEN_Z = 0.4;
+const FROZEN_CARDS = GRID.filter((g) => g.p.code !== "MO").map((g) => ({ g, local: { ...g, x: 0, y: 0 } as Placed, lit: FALLING.has(g.p.code) }));
 const FrozenWall = React.memo(() => (
   <div style={{ position: "absolute", left: 0, top: 0, zoom: FROZEN_Z } as React.CSSProperties}>
-    {GRID.filter((g) => g.p.code !== "MO").map((g) => (
-      <div key={g.p.code} style={{ position: "absolute", left: g.x, top: g.y, width: g.w, height: CARD_H, opacity: FALLING.has(g.p.code) ? 1 : 0.2 }}>
-        <StaticCard pl={{ ...g, x: 0, y: 0 }} borders={0} />
+    {FROZEN_CARDS.map(({ g, local, lit }) => (
+      <div key={g.p.code} style={{ position: "absolute", left: g.x, top: g.y, width: g.w, height: CARD_H, opacity: lit ? 1 : 0.2 }}>
+        <StaticCard pl={local} borders={0} />
       </div>
     ))}
   </div>
@@ -87,24 +51,48 @@ const ImPair = React.memo(({ xf }: { xf: number }) => (
     {xf > 0 ? <div style={{ position: "absolute", left: -LH.w / 2, top: -CARD_H / 2, width: LH.w, height: CARD_H, opacity: xf }}><StaticCard pl={{ ...LH, x: 0, y: 0 }} borders={0} /></div> : null}
   </>
 ));
+/** all 84 cards with stable local props; only wrapper opacity changes during dim/light */
+const FALL_ALL = GRID.map((g) => ({ g, local: { ...g, x: 0, y: 0 } as Placed }));
+const FallWallCards = React.memo(({ t, dimK, n }: { t: number; dimK: number; n: number }) => (
+  <>
+    {FALL_ALL.slice(0, n).map(({ g, local }) => {
+      const ta = fallAt.get(g.p.code);
+      const op = ta === undefined ? 1 - 0.8 * dimK : 1 - 0.8 * dimK + 0.8 * sm(t, ta - 0.05, ta + 0.2);
+      return (
+        <div key={g.p.code} style={{ position: "absolute", left: g.x, top: g.y, width: g.w, height: CARD_H, opacity: op }}>
+          <StaticCard pl={local} borders={0} />
+        </div>
+      );
+    })}
+  </>
+));
+/** premounted before S.s5 (opacity 0, cards trickle in) so the 84-card wall never mounts on the match-cut frame */
+export const FallWallLayer: React.FC<{ t: number }> = ({ t }) => {
+  const PUSH = T.s6 - 2.1;
+  if (t >= PUSH) return null;
+  const tt = Math.max(t, T.s5);
+  const k = io(tt, T.s5, PUSH);
+  const dimK = sm(tt, 15.5, 15.9);
+  const z0 = lerpLog(0.38, FROZEN_Z, k);
+  const show = t >= T.s5;
+  // ~2 cards/frame from premount start → all ready ≥0.5s before the cut
+  const n = Math.max(0, Math.min(FALL_ALL.length, Math.floor((t - (T.s5 - 2.2)) * 120)));
+  return (
+    <div style={{ position: "absolute", left: 0, top: 0, opacity: show ? 1 : 0, transformOrigin: "0 0", willChange: "transform, opacity", transform: `translate(${W / 2 - 372 - (GW / 2) * z0}px, ${H / 2 - (GH / 2) * z0}px) scale(${z0})` }}>
+      <FallWallCards t={tt} dimK={dimK} n={n} />
+    </div>
+  );
+};
 export const ShotFall: React.FC<{ t: number }> = ({ t }) => {
   const PUSH = T.s6 - 2.1; // slow push-in onto the IM card, lands on ShotSpeed's opening frame
-  const k = io(t, T.s5, PUSH);
-  const dimK = sm(t, 15.5, 15.9);
   const im = IM_WALL;
   const imC = { x: im.x + im.w / 2, y: im.y + CARD_H / 2 };
   const zEnd = Math.min(1150 / LH.w, 600 / CARD_H); // = ShotSpeed sc0
-  const z0 = lerpLog(0.38, FROZEN_Z, k);
   const n = FALL_LIST.filter((f) => t >= fallAt.get(f.code)!).length;
   const rows = Math.ceil(FALL_LIST.length / 2);
   let wall: React.ReactNode;
   if (t < PUSH) {
-    wall = (
-      <AbsoluteFill style={{ transform: "translateX(-372px)" }}>
-        <Wall cam={{ cx: GW * 0.5, cy: GH * 0.5, z: z0, aperture: 0 }}
-          cards={allCards((g) => { const ta = fallAt.get(g.p.code); return { borders: 0, op: ta === undefined ? 1 - 0.8 * dimK : 1 - 0.8 * dimK + 0.8 * sm(t, ta - 0.05, ta + 0.2) }; })} />
-      </AbsoluteFill>
-    );
+    wall = null; // FallWallLayer (premounted) owns the wall through the match cut
   } else {
     const e = io(t, PUSH, T.s6); // in-out cubic: soft start, gentle settle
     const z = lerpLog(FROZEN_Z, zEnd, e);
@@ -319,9 +307,10 @@ const PanoWall = React.memo(({ n }: { n: number }) => (
 ));
 export const PullWallLayer: React.FC<{ t: number }> = ({ t }) => {
   const { z, o } = pullState(t);
+  // opacity only (no visibility toggle): hidden→visible on a will-change layer flashes the whole frame in Studio
   const op = sm(t, T.s7 + 0.25, T.s7 + 1.25);
   return (
-    <div style={{ position: "absolute", left: 0, top: 0, opacity: op, visibility: op > 0 ? "visible" : "hidden", transformOrigin: "0 0", willChange: "transform, opacity", transform: `translate(${W / 2 + o.x - imCtr.x * z}px, ${H / 2 + o.y - imCtr.y * z}px) scale(${z / PULL_Z})` }}>
+    <div style={{ position: "absolute", left: 0, top: 0, opacity: op, transformOrigin: "0 0", willChange: "transform, opacity", transform: `translate(${W / 2 + o.x - imCtr.x * z}px, ${H / 2 + o.y - imCtr.y * z}px) scale(${z / PULL_Z})` }}>
       <PanoWall n={Math.max(0, Math.min(PANO.length, Math.floor((t - (T.s7 - 2.6)) * 120)))} />
     </div>
   );
