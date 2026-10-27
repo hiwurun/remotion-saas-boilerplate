@@ -117,9 +117,9 @@ const resample = (pts: Pt[], n: number, withEnd = false): Pt[] => {
  * points stay across the stroke from each other.
  */
 const PIECES = [
-  { inner: [14, 16], outer: [17, 20], n: 28, u: [0, 0.12] },
-  { inner: [10, 14], outer: [20, 24], n: 64, u: [0.12, 0.48] },
-  { inner: [0, 10], outer: [24, 28], n: 97, u: [0.48, 1] },
+  { inner: [14, 16], outer: [17, 20], n: 56, u: [0, 0.12] },
+  { inner: [10, 14], outer: [20, 24], n: 128, u: [0.12, 0.48] },
+  { inner: [0, 10], outer: [24, 28], n: 194, u: [0.48, 1] },
 ] as const;
 
 const INNER: Pt[] = [];
@@ -155,20 +155,27 @@ const segAngles = (pts: Pt[]) => unwrap(pts.slice(0, -1).map((p, k) => Math.atan
 const segLengths = (pts: Pt[]) => pts.slice(0, -1).map((p, k) => dist(p, pts[k + 1]));
 
 const rawCenter = INNER.map((p, k) => lerpPt(p, OUTER[k], 0.5));
-const SMOOTH = 3;
+/**
+ * Arc-length pairing of the two edges leaves small zig-zags in their midpoints. The morph stretches the
+ * centreline ~5×, which would turn that residue into a visible ripple, so it is box-filtered a few passes.
+ * The outline itself stays exact: edge points are stored relative to this centreline.
+ */
+const SMOOTH = 6;
+const SMOOTH_PASSES = 3;
+const boxFilter = (pts: Pt[]): Pt[] =>
+  pts.map((p, k) => {
+    if (k === 0 || k === pts.length - 1) return p;
+    const r = Math.min(SMOOTH, k, pts.length - 1 - k);
+    let sx = 0;
+    let sy = 0;
+    for (let j = k - r; j <= k + r; j++) {
+      sx += pts[j].x;
+      sy += pts[j].y;
+    }
+    return { x: sx / (2 * r + 1), y: sy / (2 * r + 1) };
+  });
 /** Smoothed centreline of the V stroke, logo units. */
-export const V_CENTER: Pt[] = rawCenter.map((_, k) => {
-  if (k === 0 || k === COUNT - 1) return rawCenter[k];
-  let sx = 0;
-  let sy = 0;
-  let n = 0;
-  for (let j = Math.max(0, k - SMOOTH); j <= Math.min(COUNT - 1, k + SMOOTH); j++) {
-    sx += rawCenter[j].x;
-    sy += rawCenter[j].y;
-    n++;
-  }
-  return { x: sx / n, y: sy / n };
-});
+export const V_CENTER: Pt[] = Array.from({ length: SMOOTH_PASSES }).reduce<Pt[]>((pts) => boxFilter(pts), rawCenter);
 export const V_FRAME_ANGLE = pointAngles(V_CENTER);
 export const V_SEG_ANGLE = segAngles(V_CENTER);
 export const V_SEG_LEN = segLengths(V_CENTER);

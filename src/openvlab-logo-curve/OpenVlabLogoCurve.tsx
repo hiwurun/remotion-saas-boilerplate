@@ -89,23 +89,16 @@ export const OpenVlabLogoCurve: React.FC = () => {
   const grow = interpolate(t, [1.55, 2.85], [0, 1], { ...CLAMP, easing: EASE });
   const thin = interpolate(t, [1.45, 2.35], [0, 1], { ...CLAMP, easing: EASE });
   const travel = interpolate(t, [1.5, 2.8], [0, 1], { ...CLAMP, easing: EASE });
-  const settle = interpolate(t, [2.86, 3.1], [0, 1], { ...CLAMP, easing: EASE });
+  // Every morph envelope has finished by 2.85s; from here the identical smooth path replaces the ribbon in one frame.
+  const settled = t >= 2.86;
 
   const k = 0.86 + 0.09 * intro;
   const discOpacity = fadeIn * (1 - discOut);
   const points = morphOutline({ k, bend, grow, thin, travel });
   const fill = interpolateColors(t, [1.9, 2.8], [GOLD, LINE]);
-  const glow = interpolate(t, [1.0, 1.45, 2.4, 2.9], [0, 1, 0.55, 0.4], CLAMP);
 
   return (
     <AbsoluteFill style={{ backgroundColor: BG, overflow: "hidden" }}>
-      <AbsoluteFill
-        style={{
-          background: "radial-gradient(ellipse 60% 55% at 50% 50%, rgba(255,214,0,0.05) 0%, rgba(5,6,8,0) 70%)",
-          opacity: fadeIn * (1 - 0.7 * travel),
-        }}
-      />
-
       <div
         style={{
           position: "absolute",
@@ -133,10 +126,16 @@ export const OpenVlabLogoCurve: React.FC = () => {
           opacity={0.55 * (1 - ring) * Math.min(1, ring * 6)}
         />
         <g opacity={ignite}>
-          <polygon points={points} fill="none" stroke={GOLD} strokeOpacity={0.05 * glow} strokeWidth={26} strokeLinejoin="round" />
-          <polygon points={points} fill="none" stroke={GOLD} strokeOpacity={0.12 * glow} strokeWidth={10} strokeLinejoin="round" />
-          <polygon points={points} fill={fill} opacity={1 - settle} />
-          <path d={CURVE_PATH} fill="none" stroke={LINE} strokeWidth={CURVE_WIDTH} strokeLinecap="round" strokeLinejoin="round" opacity={settle} />
+          <polygon points={points} fill={fill} visibility={settled ? "hidden" : "visible"} />
+          <path
+            d={CURVE_PATH}
+            fill="none"
+            stroke={LINE}
+            strokeWidth={CURVE_WIDTH}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            visibility={settled ? "visible" : "hidden"}
+          />
         </g>
       </svg>
     </AbsoluteFill>
