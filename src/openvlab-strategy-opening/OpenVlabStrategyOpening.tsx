@@ -1,126 +1,129 @@
 import React from "react";
-import { AbsoluteFill, Easing, interpolateColors, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { SANS } from "../shared/fonts";
 import { CHART_MOUNT_AT, LogoCurveMorph, MORPH_BG } from "../openvlab-logo-curve/OpenVlabLogoCurve";
+import { buildCurveTarget } from "../openvlab-logo-curve/vMark";
 import {
-  CHART_COLORS,
+  CHART_COLORS_DARK,
   ChartStageFrame,
   StrategyChartCanvas,
-  type ChartLineInput,
+  type ChartColors,
 } from "../openvlab-logo-curve/strategy-chart/StrategyChartView";
-import {
-  STAGE_LEFT,
-  STAGE_SCALE,
-  STAGE_TOP,
-  buildLiveArea,
-  buildLiveBreakEven,
-  buildLiveLine,
-  chartPointAt,
-  formatUnderlyingPrice,
-  lineLabel,
-} from "../openvlab-logo-curve/strategy-chart/model";
-import { ProfitTablePanel } from "./components/ProfitTablePanel";
+import { STAGE_LEFT, STAGE_SCALE, STAGE_TOP } from "../openvlab-logo-curve/strategy-chart/model";
+import { ProfitTablePanel, tableCellCenter } from "./components/ProfitTablePanel";
 import { RULER_HEIGHT, StrikeRulerStrip } from "./components/StrikeRulerStrip";
-import { ScenarioToolbar } from "./components/ScenarioToolbar";
-import { formatProfitLoss, strikeX } from "./data";
+import { NOW_DTE, PRETTY_DTE, SPREAD, TABLE_COLUMNS, buildTable } from "./data";
 import {
-  CAPTIONS,
   H,
-  MID_DTE,
-  NEAR_EXPIRY_DTE,
-  NOW_DTE,
+  INSERT_FROM,
+  INSERT_TO,
   SOFT,
-  SPOT_PRICE,
   W,
   cameraAt,
-  ghostSplitAt,
-  ghostVisible,
-  ivMultAt,
+  ghostDteAt,
+  ghostOpacityAt,
   ramp,
   solidDteAt,
-  tableSlideAt,
   window4,
 } from "./timeline";
 
 /**
- * OpenVlab strategy promo opening — 「到期好看，不等于现在好看」.
+ * OpenVlab strategy promo — 别被一张「到期很好看」的图骗进去.
  *
- * One continuous world: the logo → curve morph lands on the product chart's T+0 line, and every later shot is a
- * camera move or a state change on that same layout (strike ruler above, scenario sliders below, table to the
- * right). Lines are recomputed from the product chart pipeline every frame, so date / IV changes morph in-camera.
- * No glow, no rim ring, no blur, no white flash; all fades are monotonic within their beat.
+ * One continuous world: the mark unbends onto the near-expiry PnL line of a bull call spread, the product chart
+ * assembles around it, and time scrubs back to today in-camera so the pretty shape sags. Lines are recomputed
+ * from the product chart pipeline every frame. Dark product theme throughout, no glow / ring / blur / flash.
  */
 export { FPS, H, TOTAL, W } from "./timeline";
 
 const LINE = "#F4EFE4";
+const COLORS: ChartColors = { ...CHART_COLORS_DARK, surface: MORPH_BG };
 const RULER_TOP = STAGE_TOP - RULER_HEIGHT * STAGE_SCALE - 6;
-const TOOLBAR_TOP = STAGE_TOP + 380 * STAGE_SCALE + 26;
-const SLIDE_DISTANCE = W;
+const MORPH_TARGET = buildCurveTarget(SPREAD.screenPoints(PRETTY_DTE));
 
-const signed = (v: number) => `${v >= 0 ? "+" : ""}${formatProfitLoss(v)}`;
-const shortDate = (dte: number) => lineLabel(dte).split(" ")[1]?.replace("月", "/").replace("日", "") ?? "";
+const TABLE = buildTable(SPREAD);
+const MAX_LOSS_ROW = 13;
+const EXPIRY_COL = TABLE_COLUMNS.length - 1;
+const MAX_LOSS_CELL = tableCellCenter(TABLE, MAX_LOSS_ROW, EXPIRY_COL);
 
-const Caption: React.FC<{ t: number }> = ({ t }) => (
-  <>
-    {CAPTIONS.map((c) => {
-      const o = window4(t, c.from, c.from + 0.6, c.to - 0.6, c.to);
-      if (o <= 0) return null;
-      return (
-        <div
-          key={c.text}
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 44,
-            textAlign: "center",
-            fontFamily: SANS,
-            fontSize: 30,
-            fontWeight: 500,
-            letterSpacing: "0.06em",
-            color: CHART_COLORS.foreground,
-            opacity: 0.78 * o,
-            transform: `translateY(${(1 - o) * 6}px)`,
-          }}
-        >
-          {c.text}
-        </div>
-      );
-    })}
-  </>
-);
+/** S2 micro word, parked just above the "now" line's right shoulder (world px). */
+const NOW_WORD_AT = (() => {
+  const p = SPREAD.pointAt(7000, NOW_DTE);
+  return { x: STAGE_LEFT + STAGE_SCALE * p.x, y: STAGE_TOP + STAGE_SCALE * p.y };
+})();
 
-const Lockup: React.FC<{ t: number }> = ({ t }) => {
-  const enter = ramp(t, 53.8, 55.0, SOFT);
-  const o = enter * (1 - ramp(t, 55.35, 56.0, SOFT));
+const NowWord: React.FC<{ t: number }> = ({ t }) => {
+  const o = window4(t, 19.9, 20.6, 21.3, 21.9);
   if (o <= 0) return null;
-  const spacing = 0.62 - 0.2 * enter;
   return (
-    <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", fontFamily: SANS, opacity: o }}>
-      <BrandMark size={92} src="openvlab-market/logo.svg" glow={0} />
+    <div
+      style={{
+        position: "absolute",
+        left: NOW_WORD_AT.x,
+        top: NOW_WORD_AT.y - 46,
+        transform: "translateX(-50%)",
+        fontFamily: SANS,
+        fontSize: 20,
+        fontWeight: 500,
+        letterSpacing: "0.3em",
+        paddingLeft: "0.3em",
+        color: COLORS.foreground,
+        opacity: 0.82 * o,
+        whiteSpace: "nowrap",
+      }}
+    >
+      现在
+    </div>
+  );
+};
+
+/** Sub-second ProfitTable beauty cut: the expiry column's max-loss cell, macro, drifting. */
+const TableInsert: React.FC<{ t: number }> = ({ t }) => {
+  if (t < INSERT_FROM || t >= INSERT_TO) return null;
+  const p = (t - INSERT_FROM) / (INSERT_TO - INSERT_FROM);
+  const z = 4.2 + 0.18 * p;
+  const sx = 1560 - 26 * p;
+  const sy = 560 + 6 * p;
+  return (
+    <AbsoluteFill style={{ backgroundColor: MORPH_BG, overflow: "hidden" }}>
       <div
         style={{
-          marginTop: 30,
-          fontSize: 44,
-          fontWeight: 500,
-          color: LINE,
-          letterSpacing: `${spacing}em`,
-          paddingLeft: `${spacing}em`,
+          position: "absolute",
+          left: 0,
+          top: 0,
+          transformOrigin: "0 0",
+          transform: `translate(${sx}px, ${sy}px) scale(${z}) translate(${-MAX_LOSS_CELL.x}px, ${-MAX_LOSS_CELL.y}px)`,
         }}
       >
+        <ProfitTablePanel table={TABLE} colors={COLORS} />
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+const Lockup: React.FC<{ t: number }> = ({ t }) => {
+  const enter = ramp(t, 33.0, 34.4, SOFT);
+  const o = enter * (1 - ramp(t, 35.3, 36.0, SOFT));
+  if (o <= 0) return null;
+  const spacing = 0.56 - 0.16 * enter;
+  return (
+    <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", fontFamily: SANS, opacity: o }}>
+      <BrandMark size={88} src="openvlab-market/logo.svg" glow={0} />
+      <div style={{ marginTop: 28, fontSize: 42, fontWeight: 500, color: LINE, letterSpacing: `${spacing}em`, paddingLeft: `${spacing}em` }}>
         OpenVlab
       </div>
       <div
         style={{
           marginTop: 22,
-          fontSize: 19,
-          color: "rgba(244,239,228,0.52)",
-          letterSpacing: "0.36em",
-          paddingLeft: "0.36em",
+          fontSize: 20,
+          color: "rgba(244,239,228,0.56)",
+          letterSpacing: "0.32em",
+          paddingLeft: "0.32em",
+          opacity: ramp(t, 33.6, 34.6, SOFT),
         }}
       >
-        到期好看，不等于现在好看
+        到期好看，不够。
       </div>
     </AbsoluteFill>
   );
@@ -132,61 +135,16 @@ export const OpenVlabStrategyOpening: React.FC = () => {
   const t = frame / fps;
 
   const cam = cameraAt(t);
-  const bg =
-    t < 20
-      ? interpolateColors(ramp(t, 3.2, 4.6, Easing.inOut(Easing.sin)), [0, 1], [MORPH_BG, CHART_COLORS.surface])
-      : interpolateColors(t, [52.6, 54.2], [CHART_COLORS.surface, MORPH_BG]);
-  const worldOpacity = 1 - ramp(t, 52.6, 54.0, SOFT);
+  const worldOpacity = 1 - ramp(t, 32.2, 33.4, SOFT);
 
-  /* ---- live strategy state ---- */
   const solidDte = solidDteAt(t);
-  const ivMult = ivMultAt(t);
-  const split = ghostSplitAt(t);
-  const ghostDte = solidDte + (NOW_DTE - solidDte) * split;
-
-  const secondaryFade = ramp(t, 20.0, 21.0) * (1 - 0.7 * ramp(t, 24.2, 24.9));
-  const lines: ChartLineInput[] = [
-    buildLiveLine({ lineDte: solidDte, ivMult, index: 0, idBase: "strat-graph-0-ovl" }),
-    { ...buildLiveLine({ lineDte: MID_DTE, ivMult, index: 1, idBase: "strat-graph-1-ovl" }), fade: secondaryFade },
-    { ...buildLiveLine({ lineDte: 0, ivMult, index: 2, idBase: "strat-graph-2-ovl" }), fade: secondaryFade },
-  ];
-  const ghostOpacity = 0.5;
-  const ghost = ghostVisible(t)
-    ? { line: buildLiveLine({ lineDte: ghostDte, ivMult, index: 0, idBase: "strat-ghost-ovl" }), opacity: ghostOpacity }
-    : null;
-
-  const legend = [
-    ...lines.map((l) => ({ key: l.gradientIdBase, label: l.label, dashArray: l.dashArray, opacity: l.opacity })),
-    { key: "ghost", label: lineLabel(NOW_DTE), dashArray: undefined, opacity: ghostOpacity },
-  ];
-  const secondaryLegend = ramp(t, 20.2, 21.0) * (1 - 0.6 * ramp(t, 24.2, 24.9));
-  const legendOpacity = [ramp(t, 4.75, 5.25), secondaryLegend, secondaryLegend, ramp(t, 25.6, 26.4) * (1 - ramp(t, 50.2, 51.2))];
-
-  const spot = chartPointAt(SPOT_PRICE, solidDte, ivMult);
-  const spotNow = chartPointAt(SPOT_PRICE, ghostDte, ivMult);
-  const readoutOpacity = window4(t, 27.6, 28.3, 50.0, 50.6);
-  const readout =
-    readoutOpacity > 0
-      ? {
-          opacity: readoutOpacity,
-          x: strikeX(SPOT_PRICE),
-          priceText: formatUnderlyingPrice(SPOT_PRICE),
-          points: [
-            { y: spotNow.y, text: `现在 ${signed(spotNow.value)}` },
-            { y: spot.y, text: `${shortDate(NEAR_EXPIRY_DTE)} ${signed(spot.value)}` },
-          ],
-        }
-      : null;
-
-  /* ---- layout state ---- */
-  const slide = tableSlideAt(t);
-  const chartDx = -SLIDE_DISTANCE * slide;
-  const rulerIn = ramp(t, 8.5, 9.5, SOFT);
-  const dateIn = ramp(t, 13.8, 14.6, SOFT);
-  const ivIn = ramp(t, 42.2, 43.4, SOFT);
+  const ghostOpacity = ghostOpacityAt(t);
+  const ghost =
+    ghostOpacity > 0 ? { line: SPREAD.buildLine({ lineDte: ghostDteAt(t), index: 1, idBase: "strat-ghost-ovl" }), opacity: ghostOpacity } : null;
+  const rulerIn = ramp(t, 4.2, 5.0, SOFT);
 
   return (
-    <AbsoluteFill style={{ backgroundColor: bg, overflow: "hidden" }}>
+    <AbsoluteFill style={{ backgroundColor: MORPH_BG, overflow: "hidden" }}>
       <div
         style={{
           position: "absolute",
@@ -203,64 +161,47 @@ export const OpenVlabStrategyOpening: React.FC = () => {
           <div
             style={{
               position: "absolute",
-              left: STAGE_LEFT + chartDx,
+              left: STAGE_LEFT,
               top: RULER_TOP,
               transformOrigin: "0 0",
-              transform: `scale(${STAGE_SCALE}) translateY(${-36 * (1 - rulerIn)}px)`,
+              transform: `scale(${STAGE_SCALE}) translateY(${-24 * (1 - rulerIn)}px)`,
               opacity: rulerIn,
             }}
           >
-            <StrikeRulerStrip legOpacity={ramp(t, 9.2, 9.8)} />
+            <StrikeRulerStrip m={SPREAD} colors={COLORS} legOpacity={ramp(t, 4.7, 5.3)} />
           </div>
         ) : null}
 
-        {t >= CHART_MOUNT_AT && slide < 1 ? (
-          <ChartStageFrame dx={chartDx}>
+        {t >= CHART_MOUNT_AT ? (
+          <ChartStageFrame>
             <StrategyChartCanvas
-              lines={lines}
+              model={SPREAD}
+              colors={COLORS}
+              lines={[SPREAD.buildLine({ lineDte: solidDte, index: 0, idBase: "strat-graph-0-ovl" })]}
               ghost={ghost}
-              areaPath={buildLiveArea(solidDte, ivMult)}
-              areaGradientIdBase={lines[0].gradientIdBase}
-              area={ramp(t, 4.6, 5.2)}
-              zeroLine={ramp(t, 3.7, 4.3)}
-              axes={ramp(t, 3.75, 4.15)}
-              ticks={ramp(t, 3.85, 4.55)}
-              currentPrice={ramp(t, 9.3, 9.9)}
-              breakEven={buildLiveBreakEven(solidDte, ivMult)}
-              breakEvenDraw={ramp(t, 7.0, 8.1, SOFT)}
-              breakEvenLabel={ramp(t, 7.9, 8.4)}
-              legend={legend}
-              legendOpacity={legendOpacity}
-              readout={readout}
+              areaPath={SPREAD.buildArea(solidDte)}
+              areaGradientIdBase="strat-graph-0-ovl"
+              area={ramp(t, 4.3, 4.9)}
+              zeroLine={ramp(t, 3.5, 4.1)}
+              axes={ramp(t, 3.55, 3.95)}
+              ticks={ramp(t, 3.65, 4.35)}
+              currentPrice={ramp(t, 4.4, 4.9)}
+              currentPriceLabel={0}
+              breakEven={SPREAD.liveBreakEven(solidDte)}
+              breakEvenDraw={ramp(t, 6.6, 7.8, SOFT)}
+              breakEvenOpacity={0.6}
+              breakEvenLabel={0}
+              legend={[]}
+              legendOpacity={[]}
             />
           </ChartStageFrame>
         ) : null}
 
-        {slide > 0 ? (
-          <ChartStageFrame dx={SLIDE_DISTANCE * (1 - slide)}>
-            <ProfitTablePanel focus={window4(t, 36.7, 37.5, 39.3, 39.8)} />
-          </ChartStageFrame>
-        ) : null}
-
-        {dateIn > 0 ? (
-          <div style={{ position: "absolute", left: STAGE_LEFT, top: TOOLBAR_TOP, transformOrigin: "0 0", transform: `scale(${STAGE_SCALE})` }}>
-            <ScenarioToolbar
-              dateDte={solidDte}
-              dateOpacity={dateIn * (1 - 0.45 * ramp(t, 42.4, 43.0))}
-              dateDy={14 * (1 - dateIn)}
-              dateActive={window4(t, 14.9, 15.2, 19.6, 20.0)}
-              ivMult={ivMult}
-              ivOpacity={ivIn}
-              ivDy={14 * (1 - ivIn)}
-              ivActive={window4(t, 43.3, 43.6, 46.2, 46.6)}
-            />
-          </div>
-        ) : null}
-
-        <LogoCurveMorph t={t} />
+        <NowWord t={t} />
+        <LogoCurveMorph t={t} target={MORPH_TARGET} />
       </div>
 
-      <Caption t={t} />
+      <TableInsert t={t} />
       <Lockup t={t} />
     </AbsoluteFill>
   );

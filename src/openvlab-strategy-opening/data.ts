@@ -1,4 +1,23 @@
-import { SNAPSHOT, lineLabel, theoreticalProfitLoss, xScale, CHART_LAYOUT } from "../openvlab-logo-curve/strategy-chart/model";
+import {
+  SNAPSHOT,
+  type StrategyModel,
+  createStrategyModel,
+  snapshotMark,
+} from "../openvlab-logo-curve/strategy-chart/model";
+
+/**
+ * Promo strategy: IM2611 bull call spread — long 1× 6600 C @ 240.4 (captured fill), short 1× 6800 C at the model
+ * mark (no captured quote). Line DTEs: the "pretty" near-expiry date first, so the morph lands on it.
+ */
+export const PRETTY_DTE = 2;
+export const NOW_DTE = 24.4;
+export const SPREAD: StrategyModel = createStrategyModel({
+  legs: [
+    { type: "C", strike: 6600, qty: 1, cost: 240.4 },
+    { type: "C", strike: 6800, qty: -1, cost: snapshotMark("C", 6800) },
+  ],
+  lineDtes: [PRETTY_DTE, 6.4, 0],
+});
 
 /**
  * IM2611 strike chain open interest (DTO `result.context.i.c.IM2611.s`, field `o` → quote.oi), from the frozen
@@ -19,14 +38,14 @@ export const OI_PUT: Record<number, number> = {
 };
 const ALL_STRIKES = Object.keys(OI_CALL).map(Number);
 
-/** Strikes that fall inside the chart's price domain, positioned on the chart's own x axis (container px). */
-export const RULER_STRIKES = ALL_STRIKES.filter((s) => s > SNAPSHOT.priceMin && s < SNAPSHOT.priceMax).map((strike) => ({
-  strike,
-  x: CHART_LAYOUT.left + xScale(strike),
-  call: OI_CALL[strike] ?? 0,
-  put: OI_PUT[strike] ?? 0,
-}));
-export const strikeX = (price: number) => CHART_LAYOUT.left + xScale(price);
+/** Strikes inside the chart's price domain, positioned on the chart's own x axis (container px). */
+export const rulerStrikes = (m: StrategyModel) =>
+  ALL_STRIKES.filter((s) => s > m.priceMin && s < m.priceMax).map((strike) => ({
+    strike,
+    x: m.priceX(strike),
+    call: OI_CALL[strike] ?? 0,
+    put: OI_PUT[strike] ?? 0,
+  }));
 
 /* ---------------- ProfitTable (表格) ---------------- */
 const DAY_MS = 86_400_000;
@@ -49,41 +68,23 @@ export const TABLE_COLUMNS = (() => {
 
 /** 19 rows across ±range around the underlying (ProfitTable row count for this height), top = highest price. */
 const ROW_HALF = 9;
-export const TABLE_ROWS = Array.from({ length: ROW_HALF * 2 + 1 }, (_, i) => {
-  const k = ROW_HALF - i;
-  const pct = (SNAPSHOT.range * k) / ROW_HALF;
-  const price = SNAPSHOT.underlying * (1 + pct);
-  return {
-    price,
-    pct: pct * 100,
-    // ProfitTable draws its dashed accent rule under the row that holds the current price.
-    showLine: k === -1,
-    values: TABLE_COLUMNS.map((c) => theoreticalProfitLoss(price, c.dte)),
-  };
-});
-
-const allValues = TABLE_ROWS.flatMap((r) => r.values);
-export const TABLE_MAX = Math.max(...allValues);
-export const TABLE_MIN = Math.min(...allValues);
-
-/** Cells that carry the shape: max gain, max loss, and per date the cell closest to break-even. */
-export const KEY_CELLS = (() => {
-  const keys = new Map<string, "max" | "min" | "be">();
-  TABLE_ROWS.forEach((r, ri) =>
-    r.values.forEach((v, ci) => {
-      if (v >= TABLE_MAX - 0.5) keys.set(`${ri}:${ci}`, "max");
-      else if (v <= TABLE_MIN + 0.5) keys.set(`${ri}:${ci}`, "min");
-    }),
-  );
-  TABLE_COLUMNS.forEach((_, ci) => {
-    let best = 0;
-    TABLE_ROWS.forEach((r, ri) => {
-      if (Math.abs(r.values[ci]) < Math.abs(TABLE_ROWS[best].values[ci])) best = ri;
-    });
-    keys.set(`${best}:${ci}`, "be");
+export const buildTable = (m: StrategyModel) => {
+  const rows = Array.from({ length: ROW_HALF * 2 + 1 }, (_, i) => {
+    const k = ROW_HALF - i;
+    const pct = (SNAPSHOT.range * k) / ROW_HALF;
+    const price = SNAPSHOT.underlying * (1 + pct);
+    return {
+      price,
+      pct: pct * 100,
+      // ProfitTable draws its dashed accent rule under the row that holds the current price.
+      showLine: k === -1,
+      values: TABLE_COLUMNS.map((c) => m.pnl(price, c.dte)),
+    };
   });
-  return keys;
-})();
+  const all = rows.flatMap((r) => r.values);
+  return { rows, max: Math.max(...all), min: Math.min(...all) };
+};
+export type ProfitTable = ReturnType<typeof buildTable>;
 
 /** ProfitLossTableHelper.calculateBackgroundColor (vlab-frontend strategy-core profit-loss-table-helper.ts). */
 export const getBackgroundColor = (value: number, maxRange: number, minRange: number) => {
@@ -107,5 +108,3 @@ export const formatPercentLabel = (pct: number, addSign = false) => {
 };
 
 export const formatProfitLoss = (value: number) => Math.round(value).toLocaleString("en-US");
-
-export { lineLabel };

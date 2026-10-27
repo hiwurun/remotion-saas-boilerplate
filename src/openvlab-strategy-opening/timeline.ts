@@ -1,86 +1,84 @@
 import { Easing, interpolate } from "remotion";
 import { CLAMP, EASE } from "../shared/motion";
+import { NOW_DTE, PRETTY_DTE } from "./data";
 
 export const FPS = 60;
 export const W = 1920;
 export const H = 1080;
-export const DURATION_S = 56;
+export const DURATION_S = 36;
 export const TOTAL = DURATION_S * FPS;
 
-/** Shot boundaries (s). */
-export const SHOTS = {
-  s0: [0, 6],
-  s1: [6, 13],
-  s2: [13, 24],
-  s3: [24, 34],
-  s4: [34, 42],
-  s5: [42, 50],
-  s6: [50, 56],
-} as const;
-
-/** Soft in-out for camera and slider moves (gentler than EASE so moves read as deliberate, not snappy). */
+/** Soft in-out for state changes (gentler than EASE so moves read as deliberate, not snappy). */
 export const SOFT = Easing.bezier(0.45, 0, 0.2, 1);
 
 export const ramp = (t: number, a: number, b: number, easing = EASE) => interpolate(t, [a, b], [0, 1], { ...CLAMP, easing });
 /** 0 → 1 over [a, b], back to 0 over [c, d]. */
 export const window4 = (t: number, a: number, b: number, c: number, d: number) => ramp(t, a, b) * (1 - ramp(t, c, d));
 
-/* ---------------- camera (world = the 1920×1080 frame layout at the end of S0) ---------------- */
+/* ---------------- camera (world = the 1920×1080 frame layout the morph lands in) ---------------- */
 type CamKey = { t: number; z: number; x: number; y: number };
 const CAM: CamKey[] = [
-  { t: 0, z: 0.9, x: 960, y: 540 }, // S0: logo on black
-  { t: 5.6, z: 1, x: 960, y: 540 }, // push-in until the chart has landed full-frame
-  { t: 6.0, z: 1, x: 960, y: 540 },
-  { t: 9.8, z: 1.38, x: 1040, y: 470 }, // S1: slow push onto the T+0 mid segment, ruler in frame above
-  { t: 13.0, z: 1.38, x: 1040, y: 470 },
-  { t: 14.8, z: 1.05, x: 960, y: 590 }, // S2: slight pull-back to reveal the date slider
-  { t: 24.6, z: 1.05, x: 960, y: 590 },
-  { t: 27.4, z: 1.55, x: 1150, y: 480 }, // S3: push into the split between the two lines, ruler kept whole
-  { t: 33.6, z: 1.55, x: 1150, y: 480 },
-  { t: 35.0, z: 1, x: 960, y: 540 }, // S4: frame the whole panel for the table slide
-  { t: 41.6, z: 1, x: 960, y: 540 },
-  { t: 43.4, z: 1.08, x: 975, y: 600 }, // S5: chart + IV slider, legend kept in frame
-  { t: 50.4, z: 1.08, x: 975, y: 600 },
-  { t: 54.8, z: 0.84, x: 960, y: 540 }, // S6: slow pull-back
-  { t: DURATION_S, z: 0.82, x: 960, y: 540 },
+  { t: 0, z: 0.92, x: 960, y: 540 }, // S0: mark on black
+  { t: 2.9, z: 0.95, x: 960, y: 532 },
+  { t: 5.0, z: 1.04, x: 962, y: 520 }, // the real chart, ruler above
+  { t: 9.6, z: 1.68, x: 1245, y: 548 }, // S1: the pretty ramp + plateau fills the frame, ruler a sliver at the top
+  { t: 12.0, z: 1.72, x: 1240, y: 546 },
+  { t: 21.4, z: 1.8, x: 1225, y: 540 }, // S2: same shot, barely drifting while time scrubs back
+  { t: 24.6, z: 1.95, x: 640, y: 596 }, // S3: down onto the loss floor → cut
+  { t: 25.4, z: 1.98, x: 600, y: 604 },
+  { t: 27.8, z: 1.45, x: 1130, y: 525 }, // S4: now vs near-expiry
+  { t: 30.2, z: 1.48, x: 1140, y: 522 },
+  { t: 34.0, z: 0.86, x: 960, y: 520 }, // pull-back
+  { t: DURATION_S, z: 0.84, x: 960, y: 520 },
 ];
 
-export const cameraAt = (t: number) => {
-  let i = 0;
-  while (i < CAM.length - 2 && t >= CAM[i + 1].t) i++;
-  const a = CAM[i];
-  const b = CAM[i + 1];
-  const p = SOFT(Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))));
-  return {
-    z: Math.exp(Math.log(a.z) + (Math.log(b.z) - Math.log(a.z)) * p),
-    x: a.x + (b.x - a.x) * p,
-    y: a.y + (b.y - a.y) * p,
+/** Fritsch–Carlson monotone cubic: C1 through every key, no overshoot, so the camera never stops dead or wobbles. */
+const monotone = (ts: number[], ys: number[]) => {
+  const n = ts.length;
+  const d = ts.slice(0, -1).map((t, i) => (ys[i + 1] - ys[i]) / (ts[i + 1] - t));
+  const m = ys.map((_, i) => (i === 0 ? d[0] : i === n - 1 ? d[n - 2] : d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2));
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) {
+      m[i] = 0;
+      m[i + 1] = 0;
+      continue;
+    }
+    const a = m[i] / d[i];
+    const b = m[i + 1] / d[i];
+    const s = a * a + b * b;
+    if (s > 9) {
+      const k = 3 / Math.sqrt(s);
+      m[i] = k * a * d[i];
+      m[i + 1] = k * b * d[i];
+    }
+  }
+  return (t: number) => {
+    if (t <= ts[0]) return ys[0];
+    if (t >= ts[n - 1]) return ys[n - 1];
+    let i = 0;
+    while (i < n - 2 && t >= ts[i + 1]) i++;
+    const h = ts[i + 1] - ts[i];
+    const u = (t - ts[i]) / h;
+    const u2 = u * u;
+    const u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * ys[i] + (u3 - 2 * u2 + u) * h * m[i] + (-2 * u3 + 3 * u2) * ys[i + 1] + (u3 - u2) * h * m[i + 1];
   };
 };
+const KEY_T = CAM.map((k) => k.t);
+const camLogZ = monotone(KEY_T, CAM.map((k) => Math.log(k.z)));
+const camX = monotone(KEY_T, CAM.map((k) => k.x));
+const camY = monotone(KEY_T, CAM.map((k) => k.y));
+
+export const cameraAt = (t: number) => ({ z: Math.exp(camLogZ(t)), x: camX(t), y: camY(t) });
 
 /* ---------------- story state ---------------- */
-export const NOW_DTE = 24.4;
-export const NEAR_EXPIRY_DTE = 2.4;
-export const MID_DTE = 6.4;
-export const IV_LOW = 0.6;
-/** Spot price used for the confrontation read-out. */
-export const SPOT_PRICE = 6740;
+/** Time scrubs back from the near-expiry date to today, in-camera (S2). */
+export const solidDteAt = (t: number) => PRETTY_DTE + (NOW_DTE - PRETTY_DTE) * ramp(t, 12.6, 19.6, SOFT);
 
-/** Date slider: now → 11/18 during S2, then frozen. */
-export const solidDteAt = (t: number) => NOW_DTE + (NEAR_EXPIRY_DTE - NOW_DTE) * ramp(t, 15.2, 19.6, SOFT);
-/** IV slider: once, 1x → 0.6x in S5. */
-export const ivMultAt = (t: number) => 1 + (IV_LOW - 1) * ramp(t, 43.6, 46.2, SOFT);
-/** Ghost of the "now" line splits off the solid in S3 and merges back in S6. */
-export const ghostSplitAt = (t: number) => ramp(t, 24.8, 27.0, SOFT) * (1 - ramp(t, 50.0, 51.8, SOFT));
-export const ghostVisible = (t: number) => t >= 24.8 && t < 51.8;
+/** S4: the near-expiry line returns as a dashed date line above "now", then settles onto it. */
+export const ghostOpacityAt = (t: number) => ramp(t, 27.3, 28.2, SOFT) * (1 - ramp(t, 31.1, 31.7));
+export const ghostDteAt = (t: number) => PRETTY_DTE + (NOW_DTE - PRETTY_DTE) * ramp(t, 30.0, 31.6, SOFT);
 
-/** Panel slide to the table (S4): 0 = chart, 1 = table. */
-export const tableSlideAt = (t: number) => ramp(t, 35.0, 36.3, SOFT) * (1 - ramp(t, 39.8, 41.1, SOFT));
-
-export const CAPTIONS: Array<{ from: number; to: number; text: string }> = [
-  { from: 7.2, to: 12.6, text: "先看现在这条线 · 横轴是标的价格" },
-  { from: 15.6, to: 23.6, text: "时间一动，同一个策略的盈亏形状就变了" },
-  { from: 27.8, to: 33.4, text: "到期好看，不等于现在好看" },
-  { from: 36.8, to: 40.0, text: "曲线的形状，就是表里的这些数字" },
-  { from: 44.0, to: 49.6, text: "波动率假设错了，哪条线“好看”也会跟着变" },
-];
+/** Full-frame ProfitTable insert (hard cut in / out). */
+export const INSERT_FROM = 24.6;
+export const INSERT_TO = 25.4;
