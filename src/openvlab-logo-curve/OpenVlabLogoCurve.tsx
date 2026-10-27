@@ -22,17 +22,20 @@ import {
   VERTEX_INDEX,
   geom,
 } from "./vMark";
+import { T0_SCREEN_STROKE } from "./strategy-chart/model";
+import { CHART_SURFACE, type ChartReveal, StrategyChartStage } from "./strategy-chart/StrategyChartView";
 
 /**
- * Single trial shot: the OpenVlab mark settles, its amber disc drains into the V, and the V's stroke unbends
- * into the smooth T+0 PnL curve of the strategy chart (bare stroke, ready for axes/colour overlays).
+ * Single shot: the OpenVlab mark settles, its amber disc drains into the V, the V's stroke unbends into the T+0
+ * PnL line, and the product strategy chart (StrategyChartView port) assembles around that exact line.
  *
- * No shimmer / flicker: no BrandMark glow, no expanding rim ring, no end cross-fade, no animated bg glow.
+ * No shimmer / flicker: no BrandMark glow, no expanding rim ring, no animated bg glow, and every chart fade is
+ * monotonic. The bare line fades out over the full-opacity product line, so the hand-off has no alpha dip.
  */
 export const FPS = 60;
 export const W = 1920;
 export const H = 1080;
-export const TOTAL = Math.round(3.9 * FPS);
+export const TOTAL = Math.round(6.4 * FPS);
 
 const LOGO_SRC = "openvlab-market/logo.svg";
 const BG = "#050608";
@@ -102,8 +105,27 @@ export const OpenVlabLogoCurve: React.FC = () => {
   );
   const fill = interpolateColors(t, [1.9, 2.8], [GOLD, LINE]);
 
+  // Chart phase. The stage mounts under the settled bare line with its T+0 series already at full opacity.
+  const showChart = t >= 2.9;
+  const handoff = interpolate(t, [2.95, 3.5], [0, 1], { ...CLAMP, easing: EASE });
+  const bareWidth = CURVE_WIDTH + (T0_SCREEN_STROKE - CURVE_WIDTH) * handoff;
+  const bg = interpolateColors(t, [3.3, 4.0], [BG, CHART_SURFACE]);
+  const ramp = (a: number, b: number) => interpolate(t, [a, b], [0, 1], { ...CLAMP, easing: EASE });
+  const reveal: ChartReveal = {
+    primaryLine: 1,
+    zeroLine: ramp(3.7, 4.3),
+    axes: ramp(3.75, 4.15),
+    ticks: ramp(3.85, 4.55),
+    secondaryLines: ramp(4.0, 4.9),
+    area: ramp(4.3, 4.9),
+    markers: ramp(4.6, 5.0),
+    legend: ramp(4.75, 5.25),
+  };
+
   return (
-    <AbsoluteFill style={{ backgroundColor: BG, overflow: "hidden" }}>
+    <AbsoluteFill style={{ backgroundColor: bg, overflow: "hidden" }}>
+      {showChart ? <StrategyChartStage reveal={reveal} /> : null}
+
       {discOpacity > 0.001 ? (
         <div
           style={{
@@ -125,14 +147,15 @@ export const OpenVlabLogoCurve: React.FC = () => {
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ position: "absolute", inset: 0 }}>
         <g opacity={ignite}>
           {!settled ? <polygon points={points} fill={fill} /> : null}
-          {settled ? (
+          {settled && handoff < 1 ? (
             <path
               d={CURVE_PATH}
               fill="none"
               stroke={LINE}
-              strokeWidth={CURVE_WIDTH}
-              strokeLinecap="round"
+              strokeWidth={bareWidth}
+              strokeLinecap="butt"
               strokeLinejoin="round"
+              opacity={1 - handoff}
             />
           ) : null}
         </g>

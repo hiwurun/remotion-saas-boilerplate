@@ -4,6 +4,8 @@
  * The V path and its transform are copied verbatim from public/openvlab-market/logo.svg (512×512 viewBox), so the
  * sampled outline sits exactly on top of the rendered <Img> of the logo.
  */
+import { T0_SCREEN_POINTS } from "./strategy-chart/model";
+
 export type Pt = { x: number; y: number };
 
 export const LOGO_SIZE = 512;
@@ -17,16 +19,8 @@ const PATH_DY = -42;
 const V_PATH =
   "M665.6 393.846154c-19.692308-3.938462-39.384615-3.938462-59.076923 7.876923-19.692308 7.876923-35.446154 19.692308-47.261539 31.507692-3.938462 7.876923-7.876923 11.815385-11.815384 19.692308-3.938462 7.876923 0 15.753846 7.876923 15.753846h3.938461c7.876923 0 15.753846 0 23.63077 7.876923 11.815385 11.815385 15.753846 27.569231 7.876923 43.323077-7.876923 19.692308-15.753846 35.446154-27.569231 55.138462-15.753846 19.692308-23.630769 27.569231-31.507692 31.507692-7.876923 3.938462-11.815385-3.938462-15.753846-11.815385-7.876923-15.753846-11.815385-31.507692-15.753847-47.261538-7.876923-27.569231-15.753846-70.892308-19.692307-98.461539 0-15.753846-7.876923-31.507692-15.753846-43.323077-7.876923-11.815385-23.630769-15.753846-35.446154-11.815384-23.630769 7.876923-43.323077 19.692308-59.076923 35.446154-15.753846 15.753846-31.507692 27.569231-47.261539 43.323077-3.938462 3.938462-3.938462 11.815385 0 15.753846 3.938462 3.938462 11.815385 7.876923 15.753846 3.938461 3.938462-3.938462 11.815385-3.938462 15.753846-7.876923 3.938462-3.938462 19.692308-11.815385 27.569231 7.876923s11.815385 43.323077 23.630769 78.769231c11.815385 43.323077 19.692308 63.015385 27.569231 86.646154 3.938462 19.692308 15.753846 39.384615 31.507693 55.138461 15.753846 11.815385 35.446154 15.753846 55.138461 7.876924 23.630769-15.753846 47.261538-35.446154 66.953846-55.138462 43.323077-39.384615 78.769231-90.584615 102.4-145.723077 15.753846-27.569231 19.692308-59.076923 15.753846-90.584615-3.938462-11.815385-19.692308-31.507692-39.384615-35.446154z";
 
-/** Final curve placement in the 1920×1080 frame (where axes will be overlaid later). */
-export const PLOT = { x0: 150, x1: 1770, yLow: 800, yHigh: 270 };
-/** Final stroke thickness of the curve, px. */
+/** Stroke thickness of the bare curve at the end of the morph, px. */
 export const CURVE_WIDTH = 5;
-
-/**
- * Solid T+0 line of the OpenVlab strategy chart reference, fitted from the screenshot:
- * X ∈ [0, 1] spans the price axis (≈6,100 → 7,190), value in thousands (≈ −19.2k → +38.5k, break-even at X ≈ 0.5).
- */
-const pnlCurve = (X: number) => -19.2 + 19.1 * X + 38.6 * X * X;
 
 const add = (a: Pt, b: Pt): Pt => ({ x: a.x + b.x, y: a.y + b.y });
 const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y });
@@ -183,14 +177,11 @@ export const V_SEG_LEN = segLengths(V_CENTER);
 export const V_INNER_LOCAL = INNER.map((p, k) => rotate(sub(p, V_CENTER[k]), -V_FRAME_ANGLE[k]));
 export const V_OUTER_LOCAL = OUTER.map((p, k) => rotate(sub(p, V_CENTER[k]), -V_FRAME_ANGLE[k]));
 
-/** Target curve in screen px, sampled at the same arc-length fractions U as the V. */
-const dense: Pt[] = Array.from({ length: 2001 }, (_, k) => {
-  const X = k / 2000;
-  const v = pnlCurve(X);
-  const lo = pnlCurve(0);
-  const hi = pnlCurve(1);
-  return { x: PLOT.x0 + X * (PLOT.x1 - PLOT.x0), y: PLOT.yLow + ((v - lo) / (hi - lo)) * (PLOT.yHigh - PLOT.yLow) };
-});
+/**
+ * Target curve in screen px: the product chart's T+0 series exactly where the chart stage draws it, so the morph
+ * line and the chart's primary line coincide. Sampled at the same arc-length fractions U as the V.
+ */
+const dense: Pt[] = T0_SCREEN_POINTS;
 const denseCum = [0];
 for (let k = 1; k < dense.length; k++) denseCum.push(denseCum[k - 1] + dist(dense[k - 1], dense[k]));
 const denseTotal = denseCum[denseCum.length - 1];
@@ -204,11 +195,8 @@ export const CURVE_FRAME_ANGLE = pointAngles(CURVE);
 export const CURVE_SEG_ANGLE = segAngles(CURVE);
 export const CURVE_SEG_LEN = segLengths(CURVE);
 
-/** Smooth SVG path of the finished curve (dense samples), for the settled end state. */
-export const CURVE_PATH = `M${dense
-  .filter((_, k) => k % 10 === 0)
-  .map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`)
-  .join(" L")}`;
+/** SVG path of the finished curve through every product sample, for the settled end state. */
+export const CURVE_PATH = `M${dense.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" L")}`;
 
 export const geom = { add, sub, lerpPt, rotate };
 
