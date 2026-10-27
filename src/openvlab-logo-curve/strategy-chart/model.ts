@@ -45,22 +45,25 @@ const erf = (x: number) => {
   return s * y;
 };
 const normCdf = (x: number) => 0.5 * (1 + erf(x / Math.SQRT2));
-const black76Call = (forward: number, dte: number) => {
+export const BASE_IV = IV;
+const black76Call = (forward: number, dte: number, ivMult: number) => {
   const t = dte / 365;
   if (t <= 0) return Math.max(forward - STRIKE, 0);
-  const vt = IV * Math.sqrt(t);
+  const vt = IV * ivMult * Math.sqrt(t);
   const d1 = (Math.log(forward / STRIKE) + 0.5 * vt * vt) / vt;
   return Math.exp(-RATE * t) * (forward * normCdf(d1) - STRIKE * normCdf(d1 - vt));
 };
-const theoreticalProfitLoss = (price: number, lineDte: number) => (black76Call(price, lineDte) - COST) * MULTIPLIER;
+export const theoreticalProfitLoss = (price: number, lineDte: number, ivMult = 1) =>
+  (black76Call(price, lineDte, ivMult) - COST) * MULTIPLIER;
 
-/** StrategyStats.getBreakevens for the "now" line (monotone for a long call → bisection). */
-const solveBreakEven = () => {
+/** StrategyStats.getBreakevens for one line (monotone for a long call → bisection). */
+const solveBreakEven = (lineDte = LINE_DTES[0], ivMult = 1) => {
   let lo = UNDERLYING * (1 - RANGE);
   let hi = UNDERLYING * (1 + RANGE);
+  if (theoreticalProfitLoss(lo, lineDte, ivMult) >= 0 || theoreticalProfitLoss(hi, lineDte, ivMult) < 0) return null;
   for (let i = 0; i < 80; i++) {
     const mid = (lo + hi) / 2;
-    if (theoreticalProfitLoss(mid, LINE_DTES[0]) < 0) lo = mid;
+    if (theoreticalProfitLoss(mid, lineDte, ivMult) < 0) lo = mid;
     else hi = mid;
   }
   return (lo + hi) / 2;
@@ -106,7 +109,7 @@ const scaleLinear = (domain: [number, number], range: [number, number]): Scale =
 /* ---------------- StrategyChart.tsx ---------------- */
 const priceMin = Math.max(UNDERLYING - UNDERLYING * RANGE, 0);
 const priceMax = UNDERLYING + UNDERLYING * RANGE;
-export const BREAK_EVEN = solveBreakEven();
+export const BREAK_EVEN = solveBreakEven() as number;
 
 /* ---------------- chart-math.ts calculateChartPoints ---------------- */
 const extents: ChartExtent[] = LINE_DTES.map(() => ({ max: -Infinity, min: Infinity }));
@@ -260,3 +263,85 @@ export const T0_SCREEN_POINTS = CHART_POINTS.map((p) => ({
 }));
 /** Product series stroke width (2 CSS px) in frame pixels. */
 export const T0_SCREEN_STROKE = 2 * STAGE_SCALE;
+
+/* ---------------- live series (same pipeline, evaluated per frame for date / IV changes) ---------------- */
+export const SNAPSHOT = {
+  strike: STRIKE,
+  cost: COST,
+  multiplier: MULTIPLIER,
+  underlying: UNDERLYING,
+  range: RANGE,
+  seriesDte: SERIES_DTE,
+  settlementUtcMs: SETTLEMENT_UTC_MS,
+  priceMin,
+  priceMax,
+};
+export { lineLabel };
+
+export type LiveLine = {
+  key: string;
+  label: string;
+  path: string;
+  extent: ChartExtent;
+  gradientIdBase: string;
+  dashArray?: string;
+  opacity: number;
+};
+
+const SAMPLE_PRICES: number[] = [];
+for (let price = priceMin; price <= priceMax; price += sampleStep) SAMPLE_PRICES.push(price);
+
+/** calculateChartPoints for one line: the fixed sampling grid plus that line's break-even. */
+const sampleLine = (lineDte: number, ivMult: number, breakEven: number | null) => {
+  const prices = breakEven != null && breakEven > priceMin && breakEven < priceMax ? [...SAMPLE_PRICES, breakEven].sort((a, b) => a - b) : SAMPLE_PRICES;
+  const extent: ChartExtent = { max: -Infinity, min: Infinity };
+  const values = prices.map((price) => {
+    const v = theoreticalProfitLoss(price, lineDte, ivMult);
+    extent.max = Math.max(extent.max, v);
+    extent.min = Math.min(extent.min, v);
+    return v;
+  });
+  return { prices, values, extent };
+};
+
+const toPath = (prices: number[], values: number[]) =>
+  prices.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(xScale(p))},${fmt(yScale(values[i]))}`).join("");
+
+export const buildLiveLine = (opts: { lineDte: number; ivMult: number; index: number; idBase: string; opacity?: number; dashArray?: string }): LiveLine => {
+  const be = solveBreakEven(opts.lineDte, opts.ivMult);
+  const { prices, values, extent } = sampleLine(opts.lineDte, opts.ivMult, be);
+  return {
+    key: `${opts.index}/${opts.lineDte.toFixed(3)}`,
+    label: lineLabel(Math.round(opts.lineDte * 10) / 10),
+    path: toPath(prices, values),
+    extent,
+    gradientIdBase: opts.idBase,
+    dashArray: opts.dashArray ?? LINE_STYLES[opts.index]?.dashArray,
+    opacity: opts.opacity ?? LINE_STYLES[opts.index]?.opacity ?? 1,
+  };
+};
+
+/** d3 area().y0(zeroAxisY).y1(line 0) for a live first line. */
+export const buildLiveArea = (lineDte: number, ivMult: number) => {
+  const be = solveBreakEven(lineDte, ivMult);
+  const { prices, values } = sampleLine(lineDte, ivMult, be);
+  const bottom = prices
+    .slice()
+    .reverse()
+    .map((p) => `L${fmt(xScale(p))},${fmt(ZERO_AXIS_Y)}`)
+    .join("");
+  return `${toPath(prices, values)}${bottom}Z`;
+};
+
+export const buildLiveBreakEven = (lineDte: number, ivMult: number) => {
+  const be = solveBreakEven(lineDte, ivMult);
+  if (be == null) return null;
+  const chartX = CHART_LAYOUT.left + xScale(be);
+  return { at: be, chartX, leftPercent: toOverlayPercent(chartX, CONTAINER_WIDTH), value: formatUnderlyingPrice(be) };
+};
+
+/** Chart-space point (container px) of a line at a price, for hover-style read-outs. */
+export const chartPointAt = (price: number, lineDte: number, ivMult: number) => {
+  const value = theoreticalProfitLoss(price, lineDte, ivMult);
+  return { x: CHART_LAYOUT.left + xScale(price), y: CHART_LAYOUT.top + yScale(value), value };
+};

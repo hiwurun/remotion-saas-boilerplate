@@ -80,11 +80,16 @@ const morphOutline = (opts: { k: number; bend: number; grow: number; thin: numbe
   return [...inner, ...outer.reverse()].join(" ");
 };
 
-export const OpenVlabLogoCurve: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const t = frame / fps;
+/** Time (s) at which the ribbon is replaced by the bare curve path and the product chart may mount beneath it. */
+export const MORPH_SETTLED_AT = 2.86;
+export const CHART_MOUNT_AT = 2.9;
+export const MORPH_BG = BG;
 
+/**
+ * The logo → V → bare T+0 curve morph, in 1920×1080 frame coordinates. The bare line ends by thinning to the
+ * product stroke and fading over the (already fully opaque) product line, so the hand-off has no alpha dip.
+ */
+export const LogoCurveMorph: React.FC<{ t: number }> = ({ t }) => {
   const fadeIn = interpolate(t, [0, 0.8], [0, 1], { ...CLAMP, easing: SOFT_IN });
   // Hold logo scale still during morph so subpixel SVG rescales don't shimmer.
   const intro = interpolate(t, [0, 0.9], [0, 1], { ...CLAMP, easing: EASE_OUT });
@@ -95,7 +100,7 @@ export const OpenVlabLogoCurve: React.FC = () => {
   const thin = interpolate(t, [1.45, 2.35], [0, 1], { ...CLAMP, easing: EASE });
   const travel = interpolate(t, [1.5, 2.8], [0, 1], { ...CLAMP, easing: EASE });
   // Every morph envelope has finished by 2.85s; from here the identical smooth path replaces the ribbon in one frame.
-  const settled = t >= 2.86;
+  const settled = t >= MORPH_SETTLED_AT;
 
   const k = 0.86 + 0.09 * intro;
   const discOpacity = fadeIn * (1 - discOut);
@@ -104,28 +109,12 @@ export const OpenVlabLogoCurve: React.FC = () => {
     [k, bend, grow, thin, travel],
   );
   const fill = interpolateColors(t, [1.9, 2.8], [GOLD, LINE]);
-
-  // Chart phase. The stage mounts under the settled bare line with its T+0 series already at full opacity.
-  const showChart = t >= 2.9;
   const handoff = interpolate(t, [2.95, 3.5], [0, 1], { ...CLAMP, easing: EASE });
   const bareWidth = CURVE_WIDTH + (T0_SCREEN_STROKE - CURVE_WIDTH) * handoff;
-  const bg = interpolateColors(t, [3.3, 4.0], [BG, CHART_SURFACE]);
-  const ramp = (a: number, b: number) => interpolate(t, [a, b], [0, 1], { ...CLAMP, easing: EASE });
-  const reveal: ChartReveal = {
-    primaryLine: 1,
-    zeroLine: ramp(3.7, 4.3),
-    axes: ramp(3.75, 4.15),
-    ticks: ramp(3.85, 4.55),
-    secondaryLines: ramp(4.0, 4.9),
-    area: ramp(4.3, 4.9),
-    markers: ramp(4.6, 5.0),
-    legend: ramp(4.75, 5.25),
-  };
 
+  if (handoff >= 1) return null;
   return (
-    <AbsoluteFill style={{ backgroundColor: bg, overflow: "hidden" }}>
-      {showChart ? <StrategyChartStage reveal={reveal} /> : null}
-
+    <>
       {discOpacity > 0.001 ? (
         <div
           style={{
@@ -144,10 +133,10 @@ export const OpenVlabLogoCurve: React.FC = () => {
         </div>
       ) : null}
 
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ position: "absolute", inset: 0 }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
         <g opacity={ignite}>
           {!settled ? <polygon points={points} fill={fill} /> : null}
-          {settled && handoff < 1 ? (
+          {settled ? (
             <path
               d={CURVE_PATH}
               fill="none"
@@ -160,6 +149,34 @@ export const OpenVlabLogoCurve: React.FC = () => {
           ) : null}
         </g>
       </svg>
+    </>
+  );
+};
+
+export const OpenVlabLogoCurve: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const t = frame / fps;
+
+  // Chart phase. The stage mounts under the settled bare line with its T+0 series already at full opacity.
+  const showChart = t >= CHART_MOUNT_AT;
+  const bg = interpolateColors(t, [3.3, 4.0], [BG, CHART_SURFACE]);
+  const ramp = (a: number, b: number) => interpolate(t, [a, b], [0, 1], { ...CLAMP, easing: EASE });
+  const reveal: ChartReveal = {
+    primaryLine: 1,
+    zeroLine: ramp(3.7, 4.3),
+    axes: ramp(3.75, 4.15),
+    ticks: ramp(3.85, 4.55),
+    secondaryLines: ramp(4.0, 4.9),
+    area: ramp(4.3, 4.9),
+    markers: ramp(4.6, 5.0),
+    legend: ramp(4.75, 5.25),
+  };
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: bg, overflow: "hidden" }}>
+      {showChart ? <StrategyChartStage reveal={reveal} /> : null}
+      <LogoCurveMorph t={t} />
     </AbsoluteFill>
   );
 };
