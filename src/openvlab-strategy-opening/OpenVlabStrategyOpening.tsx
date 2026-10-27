@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, interpolateColors, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolateColors, useCurrentFrame, useVideoConfig } from "remotion";
 import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { SANS } from "../shared/fonts";
 import { CHART_MOUNT_AT, LogoCurveMorph, MORPH_BG } from "../openvlab-logo-curve/OpenVlabLogoCurve";
@@ -134,7 +134,7 @@ export const OpenVlabStrategyOpening: React.FC = () => {
   const cam = cameraAt(t);
   const bg =
     t < 20
-      ? interpolateColors(t, [3.2, 4.2], [MORPH_BG, CHART_COLORS.surface])
+      ? interpolateColors(ramp(t, 3.2, 4.6, Easing.inOut(Easing.sin)), [0, 1], [MORPH_BG, CHART_COLORS.surface])
       : interpolateColors(t, [52.6, 54.2], [CHART_COLORS.surface, MORPH_BG]);
   const worldOpacity = 1 - ramp(t, 52.6, 54.0, SOFT);
 
@@ -183,7 +183,7 @@ export const OpenVlabStrategyOpening: React.FC = () => {
   const chartDx = -SLIDE_DISTANCE * slide;
   const rulerIn = ramp(t, 8.5, 9.5, SOFT);
   const dateIn = ramp(t, 13.8, 14.6, SOFT);
-  const ivIn = ramp(t, 42.4, 43.2, SOFT);
+  const ivIn = ramp(t, 42.2, 43.4, SOFT);
 
   return (
     <AbsoluteFill style={{ backgroundColor: bg, overflow: "hidden" }}>
@@ -221,7 +221,7 @@ export const OpenVlabStrategyOpening: React.FC = () => {
               ghost={ghost}
               areaPath={buildLiveArea(solidDte, ivMult)}
               areaGradientIdBase={lines[0].gradientIdBase}
-              area={ramp(t, 4.3, 4.9)}
+              area={ramp(t, 4.6, 5.2)}
               zeroLine={ramp(t, 3.7, 4.3)}
               axes={ramp(t, 3.75, 4.15)}
               ticks={ramp(t, 3.85, 4.55)}
