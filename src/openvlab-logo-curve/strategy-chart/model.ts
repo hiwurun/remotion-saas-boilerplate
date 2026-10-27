@@ -1,15 +1,15 @@
 /**
- * Static port of vlab-frontend `packages/components/src/strategy-chart` data/layout pipeline
+ * Port of vlab-frontend `packages/components/src/strategy-chart` data/layout pipeline
  * (StrategyChart.tsx → useStrategyChartLayout.ts → chart-math.ts / chart-series.ts / chart-ticks.ts),
- * evaluated once for a frozen snapshot so every frame renders identical geometry.
+ * evaluated for a frozen snapshot so every frame renders deterministic geometry.
  *
- * Snapshot (matches the reference screenshot): IM2611, long 1× MO2611-C-6600 @ 240.4, multiplier 100,
- * underlying 6645.4, settlement 2026-11-20 15:00 (+08:00), 24.4 DTE, Black-76 with the engine IV / rate of the
- * existing openvlab-strategy snapshot (0.3176116943359375 / 0.02398).
+ * Snapshot: IM2611, underlying 6645.4, multiplier 100, settlement 2026-11-20 15:00 (+08:00), 24.41 DTE, Black-76
+ * with the engine IV / rate of the existing openvlab-strategy snapshot (0.3176116943359375 / 0.02398).
+ * Default strategy (matches the reference screenshot): long 1× MO2611-C-6600 @ 240.4.
  *
  * Not in the source package (vendor-strategy / strategy-core internals) and therefore reconstructed:
- * - `getTheoreticalAs` → Black-76 call value × multiplier − cost.
- * - `chartStyleUtils.getLineDtes` / `getStyle` → [now, 11/14, expiry] with solid / dashed / dotted styles.
+ * - `getTheoreticalAs` → Σ qty × (Black-76 value − cost) × multiplier.
+ * - `chartStyleUtils.getLineDtes` / `getStyle` → the strategy's line DTEs with solid / dashed / dotted styles.
  * - `chartStyleUtils.getYDomain` → series min/max padded by 10% of the span.
  */
 
@@ -17,10 +17,10 @@ export type ChartPoint = { underlying: number; values: number[] };
 export type AxisTickX = { value: number; x: number };
 export type AxisTickY = { value: number; y: number };
 export type ChartExtent = { max: number; min: number };
+export type Leg = { type: "C" | "P"; strike: number; qty: number; cost: number };
+export type StrategyDef = { legs: Leg[]; lineDtes: number[] };
 
 /* ---------------- snapshot ---------------- */
-const STRIKE = 6600;
-const COST = 240.4;
 const MULTIPLIER = 100;
 const IV = 0.3176116943359375;
 const RATE = 0.02398;
@@ -28,15 +28,15 @@ const UNDERLYING = 6645.4;
 const RANGE = 0.082;
 /** Settlement 2026-11-20 15:00 Asia/Shanghai, as UTC ms. */
 const SETTLEMENT_UTC_MS = Date.UTC(2026, 10, 20, 7, 0, 0);
-/** `strategy.earliestSeries.dte` at capture time; lines are drawn at `LINE_DTES`. */
+/** `strategy.earliestSeries.dte` at capture time. */
 const SERIES_DTE = 24.41;
-export const LINE_DTES = [24.4, 6.4, 0];
+export const BASE_IV = IV;
 
 /** Logical (CSS px) size of the product chart container. */
 export const CONTAINER_WIDTH = 1400;
 export const CONTAINER_HEIGHT = 380;
 
-/* ---------------- pricing (strategy.getTheoreticalAs, OutputType.ProfitLoss) ---------------- */
+/* ---------------- pricing ---------------- */
 const erf = (x: number) => {
   const s = Math.sign(x);
   const a = Math.abs(x);
@@ -45,29 +45,18 @@ const erf = (x: number) => {
   return s * y;
 };
 const normCdf = (x: number) => 0.5 * (1 + erf(x / Math.SQRT2));
-export const BASE_IV = IV;
-const black76Call = (forward: number, dte: number, ivMult: number) => {
+/** Black-76 option on a future, discounted. */
+export const black76 = (type: "C" | "P", forward: number, strike: number, dte: number, ivMult = 1) => {
   const t = dte / 365;
-  if (t <= 0) return Math.max(forward - STRIKE, 0);
+  if (t <= 0) return Math.max(type === "C" ? forward - strike : strike - forward, 0);
   const vt = IV * ivMult * Math.sqrt(t);
-  const d1 = (Math.log(forward / STRIKE) + 0.5 * vt * vt) / vt;
-  return Math.exp(-RATE * t) * (forward * normCdf(d1) - STRIKE * normCdf(d1 - vt));
+  const d1 = (Math.log(forward / strike) + 0.5 * vt * vt) / vt;
+  const d2 = d1 - vt;
+  const df = Math.exp(-RATE * t);
+  return type === "C" ? df * (forward * normCdf(d1) - strike * normCdf(d2)) : df * (strike * normCdf(-d2) - forward * normCdf(-d1));
 };
-export const theoreticalProfitLoss = (price: number, lineDte: number, ivMult = 1) =>
-  (black76Call(price, lineDte, ivMult) - COST) * MULTIPLIER;
-
-/** StrategyStats.getBreakevens for one line (monotone for a long call → bisection). */
-const solveBreakEven = (lineDte = LINE_DTES[0], ivMult = 1) => {
-  let lo = UNDERLYING * (1 - RANGE);
-  let hi = UNDERLYING * (1 + RANGE);
-  if (theoreticalProfitLoss(lo, lineDte, ivMult) >= 0 || theoreticalProfitLoss(hi, lineDte, ivMult) < 0) return null;
-  for (let i = 0; i < 80; i++) {
-    const mid = (lo + hi) / 2;
-    if (theoreticalProfitLoss(mid, lineDte, ivMult) < 0) lo = mid;
-    else hi = mid;
-  }
-  return (lo + hi) / 2;
-};
+/** Model mark of a contract at the snapshot (used to price legs that have no captured quote). */
+export const snapshotMark = (type: "C" | "P", strike: number) => black76(type, UNDERLYING, strike, SERIES_DTE);
 
 /* ---------------- formatting ---------------- */
 /** underlying.profile.priceFormat for IM (0.2 tick → up to 1 decimal, grouped). */
@@ -106,47 +95,6 @@ const scaleLinear = (domain: [number, number], range: [number, number]): Scale =
   return s;
 };
 
-/* ---------------- StrategyChart.tsx ---------------- */
-const priceMin = Math.max(UNDERLYING - UNDERLYING * RANGE, 0);
-const priceMax = UNDERLYING + UNDERLYING * RANGE;
-export const BREAK_EVEN = solveBreakEven() as number;
-
-/* ---------------- chart-math.ts calculateChartPoints ---------------- */
-const extents: ChartExtent[] = LINE_DTES.map(() => ({ max: -Infinity, min: Infinity }));
-const points: ChartPoint[] = [];
-const appendPoint = (price: number) => {
-  const values = LINE_DTES.map((dte, i) => {
-    const v = theoreticalProfitLoss(price, dte);
-    extents[i].max = Math.max(extents[i].max, v);
-    extents[i].min = Math.min(extents[i].min, v);
-    return v;
-  });
-  points.push({ underlying: price, values });
-};
-const sampleStep = (priceMax - priceMin) / CONTAINER_WIDTH;
-for (let price = priceMin; price <= priceMax; price += sampleStep) appendPoint(price);
-if (BREAK_EVEN > priceMin && BREAK_EVEN < priceMax) appendPoint(BREAK_EVEN);
-points.sort((a, b) => a.underlying - b.underlying);
-export const CHART_POINTS = points;
-export const SERIES_EXTENTS = extents;
-
-/* ---------------- useStrategyChartLayout.ts ---------------- */
-const minY = Math.min(...extents.map((e) => e.min));
-const maxY = Math.max(...extents.map((e) => e.max));
-const yPad = 0.1 * (maxY - minY);
-const verticalMargins = { top: 6, bottom: 26 };
-const chartHeight = Math.max(1, CONTAINER_HEIGHT - verticalMargins.top - verticalMargins.bottom);
-const yScale = scaleLinear([maxY + yPad, minY - yPad], [0, chartHeight]);
-const yAxisLeftMargin =
-  6 * Math.max(formatYAxisTickLabel(minY).length, formatYAxisTickLabel(maxY).length, formatYAxisTickLabel(0).length) + 4;
-const horizontalMargins = { left: Math.max(0, yAxisLeftMargin), right: 24 };
-const chartWidth = Math.max(1, CONTAINER_WIDTH - horizontalMargins.left - horizontalMargins.right);
-export const CHART_LAYOUT = { ...verticalMargins, ...horizontalMargins, width: chartWidth, height: chartHeight };
-export const xScale = scaleLinear([priceMin, priceMax], [0, chartWidth]);
-export { yScale };
-export const UNDERLYING_X = xScale(UNDERLYING);
-export const ZERO_AXIS_Y = Math.min(Math.max(yScale(0), 0), chartHeight);
-
 const buildCompactXTicks = (scaleX: Scale, containerWidth: number): AxisTickX[] => {
   const rawTicks = scaleX.ticks(Math.max(2, Math.floor(containerWidth / 80)));
   const minSpacing = 44;
@@ -177,26 +125,10 @@ const buildCompactYTicks = (scaleY: Scale, containerHeight: number): AxisTickY[]
   }
   return compact;
 };
-export const X_TICKS = buildCompactXTicks(xScale, CONTAINER_WIDTH);
-export const Y_TICKS = buildCompactYTicks(yScale, CONTAINER_HEIGHT);
 
-const toOverlayPercent = (value: number, total: number) => (value / total) * 100;
-export const OVERLAY_LABELS = {
-  currentPriceLabelLeftPercent: toOverlayPercent(CHART_LAYOUT.left + UNDERLYING_X, CONTAINER_WIDTH),
-  currentPriceLabelTopPercent: toOverlayPercent(CHART_LAYOUT.top + CHART_LAYOUT.height, CONTAINER_HEIGHT),
-  currentPriceValue: formatUnderlyingPrice(UNDERLYING),
-  breakEven: {
-    chartX: CHART_LAYOUT.left + xScale(BREAK_EVEN),
-    leftPercent: toOverlayPercent(CHART_LAYOUT.left + xScale(BREAK_EVEN), CONTAINER_WIDTH),
-    priceLabelTopPercent: toOverlayPercent(CHART_LAYOUT.top, CONTAINER_HEIGHT),
-    tagLabelTopPercent: toOverlayPercent(CHART_LAYOUT.top + 12, CONTAINER_HEIGHT),
-    value: formatUnderlyingPrice(BREAK_EVEN),
-  },
-};
-
-/* ---------------- chart-series.ts ---------------- */
+/* ---------------- chart-series.ts labels / styles ---------------- */
 const WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"] as const;
-const lineLabel = (lineDte: number) => {
+export const lineLabel = (lineDte: number) => {
   const base = (() => {
     if (lineDte === 0) return "到期日";
     const local = new Date(SETTLEMENT_UTC_MS - lineDte * 86_400_000 + 8 * 3_600_000);
@@ -214,31 +146,6 @@ const LINE_STYLES: Array<{ dashArray?: string; opacity: number }> = [
   { dashArray: "1,4", opacity: 0.6 },
 ];
 
-const fmt = (v: number) => Number(v.toFixed(3));
-const linePath = (index: number) =>
-  CHART_POINTS.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(xScale(p.underlying))},${fmt(yScale(p.values[index] ?? 0))}`).join("");
-
-export const LINE_SERIES = LINE_DTES.map((lineDte, index) => ({
-  key: `${index}/${lineDte}`,
-  label: lineLabel(lineDte),
-  path: linePath(index),
-  extent: SERIES_EXTENTS[index],
-  gradientIdBase: `strat-graph-${index}-ovl`,
-  ...LINE_STYLES[index],
-}));
-
-/** d3 area().y0(zeroAxisY).y1(line 0). */
-export const AREA_PATH = (() => {
-  const top = CHART_POINTS.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(xScale(p.underlying))},${fmt(yScale(p.values[0] ?? 0))}`).join("");
-  const bottom = CHART_POINTS.slice()
-    .reverse()
-    .map((p) => `L${fmt(xScale(p.underlying))},${fmt(ZERO_AXIS_Y)}`)
-    .join("");
-  return `${top}${bottom}Z`;
-})();
-
-export const LEGEND_ITEMS = LINE_SERIES.map((s) => ({ key: s.key, label: s.label, dashArray: s.dashArray, opacity: s.opacity }));
-
 /** StrategyChartView getGradientMiddleOffset. */
 export const getGradientMiddleOffset = (extent: ChartExtent) => {
   const span = extent.max - extent.min;
@@ -250,33 +157,16 @@ export const getGradientMiddleOffset = (extent: ChartExtent) => {
   return Math.max(0, Math.min(1, extent.max / span));
 };
 
+const fmt = (v: number) => Number(v.toFixed(3));
+const toOverlayPercent = (value: number, total: number) => (value / total) * 100;
+
 /* ---------------- placement of the chart in the 1920×1080 frame ---------------- */
 /** Uniform zoom applied to the logical container (like viewing the product at 130%). */
 export const STAGE_SCALE = 1.3;
 export const STAGE_LEFT = (1920 - CONTAINER_WIDTH * STAGE_SCALE) / 2;
 export const STAGE_TOP = (1080 - CONTAINER_HEIGHT * STAGE_SCALE) / 2;
-
-/** The "now" (T+0) series in frame pixels — the morph lands exactly on this line. */
-export const T0_SCREEN_POINTS = CHART_POINTS.map((p) => ({
-  x: STAGE_LEFT + STAGE_SCALE * (CHART_LAYOUT.left + xScale(p.underlying)),
-  y: STAGE_TOP + STAGE_SCALE * (CHART_LAYOUT.top + yScale(p.values[0] ?? 0)),
-}));
 /** Product series stroke width (2 CSS px) in frame pixels. */
 export const T0_SCREEN_STROKE = 2 * STAGE_SCALE;
-
-/* ---------------- live series (same pipeline, evaluated per frame for date / IV changes) ---------------- */
-export const SNAPSHOT = {
-  strike: STRIKE,
-  cost: COST,
-  multiplier: MULTIPLIER,
-  underlying: UNDERLYING,
-  range: RANGE,
-  seriesDte: SERIES_DTE,
-  settlementUtcMs: SETTLEMENT_UTC_MS,
-  priceMin,
-  priceMax,
-};
-export { lineLabel };
 
 export type LiveLine = {
   key: string;
@@ -288,60 +178,221 @@ export type LiveLine = {
   opacity: number;
 };
 
-const SAMPLE_PRICES: number[] = [];
-for (let price = priceMin; price <= priceMax; price += sampleStep) SAMPLE_PRICES.push(price);
+/** The whole chart pipeline for one strategy. */
+export const createStrategyModel = (def: StrategyDef) => {
+  const { legs, lineDtes } = def;
+  const pnl = (price: number, lineDte: number, ivMult = 1) =>
+    legs.reduce((sum, leg) => sum + leg.qty * (black76(leg.type, price, leg.strike, lineDte, ivMult) - leg.cost), 0) * MULTIPLIER;
 
-/** calculateChartPoints for one line: the fixed sampling grid plus that line's break-even. */
-const sampleLine = (lineDte: number, ivMult: number, breakEven: number | null) => {
-  const prices = breakEven != null && breakEven > priceMin && breakEven < priceMax ? [...SAMPLE_PRICES, breakEven].sort((a, b) => a - b) : SAMPLE_PRICES;
-  const extent: ChartExtent = { max: -Infinity, min: Infinity };
-  const values = prices.map((price) => {
-    const v = theoreticalProfitLoss(price, lineDte, ivMult);
-    extent.max = Math.max(extent.max, v);
-    extent.min = Math.min(extent.min, v);
-    return v;
-  });
-  return { prices, values, extent };
-};
+  const priceMin = Math.max(UNDERLYING - UNDERLYING * RANGE, 0);
+  const priceMax = UNDERLYING + UNDERLYING * RANGE;
+  const sampleStep = (priceMax - priceMin) / CONTAINER_WIDTH;
+  const samplePrices: number[] = [];
+  for (let price = priceMin; price <= priceMax; price += sampleStep) samplePrices.push(price);
 
-const toPath = (prices: number[], values: number[]) =>
-  prices.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(xScale(p))},${fmt(yScale(values[i]))}`).join("");
+  /** StrategyStats.getBreakevens for one line: every sign change on the sampling grid, refined by bisection. */
+  const breakEvens = (lineDte: number, ivMult = 1) => {
+    const out: number[] = [];
+    const grid = [priceMin, ...samplePrices.slice(1), priceMax];
+    for (let k = 1; k < grid.length; k++) {
+      let lo = grid[k - 1];
+      let hi = grid[k];
+      const flo = pnl(lo, lineDte, ivMult);
+      const fhi = pnl(hi, lineDte, ivMult);
+      if (flo === 0 || flo * fhi >= 0) continue;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if (pnl(mid, lineDte, ivMult) * flo > 0) lo = mid;
+        else hi = mid;
+      }
+      out.push((lo + hi) / 2);
+    }
+    return out;
+  };
 
-export const buildLiveLine = (opts: { lineDte: number; ivMult: number; index: number; idBase: string; opacity?: number; dashArray?: string }): LiveLine => {
-  const be = solveBreakEven(opts.lineDte, opts.ivMult);
-  const { prices, values, extent } = sampleLine(opts.lineDte, opts.ivMult, be);
+  /* chart-math.ts calculateChartPoints */
+  const extents: ChartExtent[] = lineDtes.map(() => ({ max: -Infinity, min: Infinity }));
+  const points: ChartPoint[] = [];
+  const appendPoint = (price: number) => {
+    const values = lineDtes.map((dte, i) => {
+      const v = pnl(price, dte);
+      extents[i].max = Math.max(extents[i].max, v);
+      extents[i].min = Math.min(extents[i].min, v);
+      return v;
+    });
+    points.push({ underlying: price, values });
+  };
+  samplePrices.forEach(appendPoint);
+  const breakEven = breakEvens(lineDtes[0])[0] ?? null;
+  if (breakEven != null && breakEven > priceMin && breakEven < priceMax) appendPoint(breakEven);
+  points.sort((a, b) => a.underlying - b.underlying);
+
+  /* useStrategyChartLayout.ts */
+  const minY = Math.min(...extents.map((e) => e.min));
+  const maxY = Math.max(...extents.map((e) => e.max));
+  const yPad = 0.1 * (maxY - minY);
+  const verticalMargins = { top: 6, bottom: 26 };
+  const chartHeight = Math.max(1, CONTAINER_HEIGHT - verticalMargins.top - verticalMargins.bottom);
+  const yScale = scaleLinear([maxY + yPad, minY - yPad], [0, chartHeight]);
+  const yAxisLeftMargin =
+    6 * Math.max(formatYAxisTickLabel(minY).length, formatYAxisTickLabel(maxY).length, formatYAxisTickLabel(0).length) + 4;
+  const horizontalMargins = { left: Math.max(0, yAxisLeftMargin), right: 24 };
+  const chartWidth = Math.max(1, CONTAINER_WIDTH - horizontalMargins.left - horizontalMargins.right);
+  const layout = { ...verticalMargins, ...horizontalMargins, width: chartWidth, height: chartHeight };
+  const xScale = scaleLinear([priceMin, priceMax], [0, chartWidth]);
+  const underlyingX = xScale(UNDERLYING);
+  const zeroAxisY = Math.min(Math.max(yScale(0), 0), chartHeight);
+
+  const breakEvenOverlay = (be: number) => {
+    const chartX = layout.left + xScale(be);
+    return { at: be, chartX, leftPercent: toOverlayPercent(chartX, CONTAINER_WIDTH), value: formatUnderlyingPrice(be) };
+  };
+
+  const linePath = (index: number) =>
+    points.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(xScale(p.underlying))},${fmt(yScale(p.values[index] ?? 0))}`).join("");
+  const lineSeries = lineDtes.map((lineDte, index) => ({
+    key: `${index}/${lineDte}`,
+    label: lineLabel(lineDte),
+    path: linePath(index),
+    extent: extents[index],
+    gradientIdBase: `strat-graph-${index}-ovl`,
+    ...LINE_STYLES[index],
+  }));
+  const areaPath = (() => {
+    const bottom = points
+      .slice()
+      .reverse()
+      .map((p) => `L${fmt(xScale(p.underlying))},${fmt(zeroAxisY)}`)
+      .join("");
+    return `${linePath(0)}${bottom}Z`;
+  })();
+
+  /* live series: same pipeline, evaluated per frame for date / IV changes */
+  const sampleLine = (lineDte: number, ivMult: number) => {
+    const be = breakEvens(lineDte, ivMult);
+    const prices = [...samplePrices, ...be.filter((b) => b > priceMin && b < priceMax)].sort((a, b) => a - b);
+    const extent: ChartExtent = { max: -Infinity, min: Infinity };
+    const values = prices.map((price) => {
+      const v = pnl(price, lineDte, ivMult);
+      extent.max = Math.max(extent.max, v);
+      extent.min = Math.min(extent.min, v);
+      return v;
+    });
+    return { prices, values, extent };
+  };
+  const toPath = (prices: number[], values: number[]) =>
+    prices.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(xScale(p))},${fmt(yScale(values[i]))}`).join("");
+
+  const buildLine = (opts: { lineDte: number; ivMult?: number; index: number; idBase: string; opacity?: number; dashArray?: string }): LiveLine => {
+    const { prices, values, extent } = sampleLine(opts.lineDte, opts.ivMult ?? 1);
+    return {
+      key: `${opts.index}/${opts.lineDte.toFixed(3)}`,
+      label: lineLabel(Math.round(opts.lineDte * 10) / 10),
+      path: toPath(prices, values),
+      extent,
+      gradientIdBase: opts.idBase,
+      dashArray: opts.dashArray ?? LINE_STYLES[opts.index]?.dashArray,
+      opacity: opts.opacity ?? LINE_STYLES[opts.index]?.opacity ?? 1,
+    };
+  };
+  const buildArea = (lineDte: number, ivMult = 1) => {
+    const { prices, values } = sampleLine(lineDte, ivMult);
+    const bottom = prices
+      .slice()
+      .reverse()
+      .map((p) => `L${fmt(xScale(p))},${fmt(zeroAxisY)}`)
+      .join("");
+    return `${toPath(prices, values)}${bottom}Z`;
+  };
+  const liveBreakEven = (lineDte: number, ivMult = 1) => {
+    const be = breakEvens(lineDte, ivMult)[0];
+    return be == null ? null : breakEvenOverlay(be);
+  };
+  /** Line 0 of the given date in 1920×1080 frame px (where the chart stage draws it). */
+  const screenPoints = (lineDte: number = lineDtes[0], ivMult = 1) => {
+    const { prices, values } = sampleLine(lineDte, ivMult);
+    return prices.map((p, i) => ({
+      x: STAGE_LEFT + STAGE_SCALE * (layout.left + xScale(p)),
+      y: STAGE_TOP + STAGE_SCALE * (layout.top + yScale(values[i])),
+    }));
+  };
+
   return {
-    key: `${opts.index}/${opts.lineDte.toFixed(3)}`,
-    label: lineLabel(Math.round(opts.lineDte * 10) / 10),
-    path: toPath(prices, values),
-    extent,
-    gradientIdBase: opts.idBase,
-    dashArray: opts.dashArray ?? LINE_STYLES[opts.index]?.dashArray,
-    opacity: opts.opacity ?? LINE_STYLES[opts.index]?.opacity ?? 1,
+    legs,
+    lineDtes,
+    pnl,
+    breakEvens,
+    priceMin,
+    priceMax,
+    CHART_POINTS: points,
+    SERIES_EXTENTS: extents,
+    CHART_LAYOUT: layout,
+    xScale,
+    yScale,
+    UNDERLYING_X: underlyingX,
+    ZERO_AXIS_Y: zeroAxisY,
+    X_TICKS: buildCompactXTicks(xScale, CONTAINER_WIDTH),
+    Y_TICKS: buildCompactYTicks(yScale, CONTAINER_HEIGHT),
+    BREAK_EVEN: breakEven,
+    OVERLAY_LABELS: {
+      currentPriceLabelLeftPercent: toOverlayPercent(layout.left + underlyingX, CONTAINER_WIDTH),
+      currentPriceLabelTopPercent: toOverlayPercent(layout.top + layout.height, CONTAINER_HEIGHT),
+      currentPriceValue: formatUnderlyingPrice(UNDERLYING),
+      breakEven: {
+        ...(breakEven != null ? breakEvenOverlay(breakEven) : { at: NaN, chartX: NaN, leftPercent: NaN, value: "" }),
+        priceLabelTopPercent: toOverlayPercent(layout.top, CONTAINER_HEIGHT),
+        tagLabelTopPercent: toOverlayPercent(layout.top + 12, CONTAINER_HEIGHT),
+      },
+    },
+    LINE_SERIES: lineSeries,
+    AREA_PATH: areaPath,
+    LEGEND_ITEMS: lineSeries.map((s) => ({ key: s.key, label: s.label, dashArray: s.dashArray, opacity: s.opacity })),
+    buildLine,
+    buildArea,
+    liveBreakEven,
+    screenPoints,
+    /** Chart-space point (container px) of a line at a price, for hover-style read-outs. */
+    pointAt: (price: number, lineDte: number, ivMult = 1) => {
+      const value = pnl(price, lineDte, ivMult);
+      return { x: layout.left + xScale(price), y: layout.top + yScale(value), value };
+    },
+    /** Container-space x of a price. */
+    priceX: (price: number) => layout.left + xScale(price),
   };
 };
+export type StrategyModel = ReturnType<typeof createStrategyModel>;
 
-/** d3 area().y0(zeroAxisY).y1(line 0) for a live first line. */
-export const buildLiveArea = (lineDte: number, ivMult: number) => {
-  const be = solveBreakEven(lineDte, ivMult);
-  const { prices, values } = sampleLine(lineDte, ivMult, be);
-  const bottom = prices
-    .slice()
-    .reverse()
-    .map((p) => `L${fmt(xScale(p))},${fmt(ZERO_AXIS_Y)}`)
-    .join("");
-  return `${toPath(prices, values)}${bottom}Z`;
+export const SNAPSHOT = {
+  multiplier: MULTIPLIER,
+  underlying: UNDERLYING,
+  range: RANGE,
+  seriesDte: SERIES_DTE,
+  settlementUtcMs: SETTLEMENT_UTC_MS,
 };
 
-export const buildLiveBreakEven = (lineDte: number, ivMult: number) => {
-  const be = solveBreakEven(lineDte, ivMult);
-  if (be == null) return null;
-  const chartX = CHART_LAYOUT.left + xScale(be);
-  return { at: be, chartX, leftPercent: toOverlayPercent(chartX, CONTAINER_WIDTH), value: formatUnderlyingPrice(be) };
-};
+/* ---------------- default: the reference screenshot's long call ---------------- */
+export const LINE_DTES = [24.4, 6.4, 0];
+export const LONG_CALL = createStrategyModel({ legs: [{ type: "C", strike: 6600, qty: 1, cost: 240.4 }], lineDtes: LINE_DTES });
 
-/** Chart-space point (container px) of a line at a price, for hover-style read-outs. */
-export const chartPointAt = (price: number, lineDte: number, ivMult: number) => {
-  const value = theoreticalProfitLoss(price, lineDte, ivMult);
-  return { x: CHART_LAYOUT.left + xScale(price), y: CHART_LAYOUT.top + yScale(value), value };
-};
+export const {
+  CHART_POINTS,
+  SERIES_EXTENTS,
+  CHART_LAYOUT,
+  xScale,
+  yScale,
+  UNDERLYING_X,
+  ZERO_AXIS_Y,
+  X_TICKS,
+  Y_TICKS,
+  OVERLAY_LABELS,
+  LINE_SERIES,
+  AREA_PATH,
+  LEGEND_ITEMS,
+} = LONG_CALL;
+export const BREAK_EVEN = LONG_CALL.BREAK_EVEN as number;
+
+/** The "now" (T+0) series in frame pixels — the logo-curve morph lands exactly on this line. */
+export const T0_SCREEN_POINTS = CHART_POINTS.map((p) => ({
+  x: STAGE_LEFT + STAGE_SCALE * (CHART_LAYOUT.left + xScale(p.underlying)),
+  y: STAGE_TOP + STAGE_SCALE * (CHART_LAYOUT.top + yScale(p.values[0] ?? 0)),
+}));

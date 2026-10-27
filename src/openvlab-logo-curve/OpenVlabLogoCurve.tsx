@@ -4,11 +4,7 @@ import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { CLAMP, EASE, EASE_OUT } from "../shared/motion";
 import {
   COUNT,
-  CURVE,
-  CURVE_FRAME_ANGLE,
-  CURVE_PATH,
-  CURVE_SEG_ANGLE,
-  CURVE_SEG_LEN,
+  type CurveTarget,
   CURVE_WIDTH,
   LOGO_CENTER,
   LOGO_SIZE,
@@ -20,6 +16,7 @@ import {
   V_SEG_ANGLE,
   V_SEG_LEN,
   VERTEX_INDEX,
+  T0_TARGET,
   geom,
 } from "./vMark";
 import { T0_SCREEN_STROKE } from "./strategy-chart/model";
@@ -51,8 +48,9 @@ const fmt = (p: Pt) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
  * curve's, then re-integrated outward from the vertex, so the stroke unfolds like a wire instead of cross-fading.
  * Outline points ride along in each centreline point's local frame while the stroke thins to CURVE_WIDTH.
  */
-const morphOutline = (opts: { k: number; bend: number; grow: number; thin: number; travel: number }) => {
+const morphOutline = (opts: { k: number; bend: number; grow: number; thin: number; travel: number; target: CurveTarget }) => {
   const { k, bend, grow, thin, travel } = opts;
+  const { CURVE, CURVE_FRAME_ANGLE, CURVE_SEG_ANGLE, CURVE_SEG_LEN } = opts.target;
   const toScreen = (p: Pt): Pt => ({ x: W / 2 + (p.x - LOGO_CENTER) * k, y: H / 2 + (p.y - LOGO_CENTER) * k });
 
   const center: Pt[] = new Array(COUNT);
@@ -89,7 +87,7 @@ export const MORPH_BG = BG;
  * The logo → V → bare T+0 curve morph, in 1920×1080 frame coordinates. The bare line ends by thinning to the
  * product stroke and fading over the (already fully opaque) product line, so the hand-off has no alpha dip.
  */
-export const LogoCurveMorph: React.FC<{ t: number }> = ({ t }) => {
+export const LogoCurveMorph: React.FC<{ t: number; target?: CurveTarget }> = ({ t, target = T0_TARGET }) => {
   const fadeIn = interpolate(t, [0, 0.8], [0, 1], { ...CLAMP, easing: SOFT_IN });
   // Hold logo scale still during morph so subpixel SVG rescales don't shimmer.
   const intro = interpolate(t, [0, 0.9], [0, 1], { ...CLAMP, easing: EASE_OUT });
@@ -105,8 +103,8 @@ export const LogoCurveMorph: React.FC<{ t: number }> = ({ t }) => {
   const k = 0.86 + 0.09 * intro;
   const discOpacity = fadeIn * (1 - discOut);
   const points = useMemo(
-    () => morphOutline({ k, bend, grow, thin, travel }),
-    [k, bend, grow, thin, travel],
+    () => morphOutline({ k, bend, grow, thin, travel, target }),
+    [k, bend, grow, thin, travel, target],
   );
   const fill = interpolateColors(t, [1.9, 2.8], [GOLD, LINE]);
   const handoff = interpolate(t, [2.95, 3.5], [0, 1], { ...CLAMP, easing: EASE });
@@ -138,7 +136,7 @@ export const LogoCurveMorph: React.FC<{ t: number }> = ({ t }) => {
           {!settled ? <polygon points={points} fill={fill} /> : null}
           {settled ? (
             <path
-              d={CURVE_PATH}
+              d={target.CURVE_PATH}
               fill="none"
               stroke={LINE}
               strokeWidth={bareWidth}

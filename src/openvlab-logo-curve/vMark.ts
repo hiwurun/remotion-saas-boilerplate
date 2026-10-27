@@ -177,32 +177,44 @@ export const V_SEG_LEN = segLengths(V_CENTER);
 export const V_INNER_LOCAL = INNER.map((p, k) => rotate(sub(p, V_CENTER[k]), -V_FRAME_ANGLE[k]));
 export const V_OUTER_LOCAL = OUTER.map((p, k) => rotate(sub(p, V_CENTER[k]), -V_FRAME_ANGLE[k]));
 
-/**
- * Target curve in screen px: the product chart's T+0 series exactly where the chart stage draws it, so the morph
- * line and the chart's primary line coincide. Sampled at the same arc-length fractions U as the V.
- */
-const dense: Pt[] = T0_SCREEN_POINTS;
-const denseCum = [0];
-for (let k = 1; k < dense.length; k++) denseCum.push(denseCum[k - 1] + dist(dense[k - 1], dense[k]));
-const denseTotal = denseCum[denseCum.length - 1];
-export const CURVE: Pt[] = U.map((u) => {
-  const s = u * denseTotal;
-  let j = 1;
-  while (j < dense.length - 1 && denseCum[j] < s) j++;
-  return lerpPt(dense[j - 1], dense[j], (s - denseCum[j - 1]) / (denseCum[j] - denseCum[j - 1] || 1));
-});
-export const CURVE_FRAME_ANGLE = pointAngles(CURVE);
-export const CURVE_SEG_ANGLE = segAngles(CURVE);
-export const CURVE_SEG_LEN = segLengths(CURVE);
+/** Morph target: a polyline in screen px, sampled at the same arc-length fractions U as the V. */
+export type CurveTarget = {
+  CURVE: Pt[];
+  CURVE_FRAME_ANGLE: number[];
+  CURVE_SEG_ANGLE: number[];
+  CURVE_SEG_LEN: number[];
+  /** SVG path of the finished curve through every sample, for the settled end state. */
+  CURVE_PATH: string;
+};
 
-/** SVG path of the finished curve through every product sample, for the settled end state. */
-export const CURVE_PATH = `M${dense.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" L")}`;
+export const buildCurveTarget = (dense: Pt[]): CurveTarget => {
+  const denseCum = [0];
+  for (let k = 1; k < dense.length; k++) denseCum.push(denseCum[k - 1] + dist(dense[k - 1], dense[k]));
+  const denseTotal = denseCum[denseCum.length - 1];
+  const curve: Pt[] = U.map((u) => {
+    const s = u * denseTotal;
+    let j = 1;
+    while (j < dense.length - 1 && denseCum[j] < s) j++;
+    return lerpPt(dense[j - 1], dense[j], (s - denseCum[j - 1]) / (denseCum[j] - denseCum[j - 1] || 1));
+  });
+  const frame = pointAngles(curve);
+  const seg = segAngles(curve);
+  // Unwrapped V and curve angles must describe the same winding, otherwise a segment would spin a full turn.
+  const align = Math.round((seg[VERTEX_INDEX] - V_SEG_ANGLE[VERTEX_INDEX]) / (2 * Math.PI)) * 2 * Math.PI;
+  return {
+    CURVE: curve,
+    CURVE_FRAME_ANGLE: frame.map((a) => a - align),
+    CURVE_SEG_ANGLE: seg.map((a) => a - align),
+    CURVE_SEG_LEN: segLengths(curve),
+    CURVE_PATH: `M${dense.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" L")}`,
+  };
+};
+
+/**
+ * Default target: the product chart's T+0 series exactly where the chart stage draws it, so the morph line and
+ * the chart's primary line coincide.
+ */
+export const T0_TARGET = buildCurveTarget(T0_SCREEN_POINTS);
+export const { CURVE_PATH } = T0_TARGET;
 
 export const geom = { add, sub, lerpPt, rotate };
-
-// Unwrapped V and curve angles must describe the same winding, otherwise a segment would spin a full turn.
-const ALIGN = Math.round((CURVE_SEG_ANGLE[VERTEX_INDEX] - V_SEG_ANGLE[VERTEX_INDEX]) / (2 * Math.PI)) * 2 * Math.PI;
-if (ALIGN !== 0) {
-  for (let k = 0; k < CURVE_SEG_ANGLE.length; k++) CURVE_SEG_ANGLE[k] -= ALIGN;
-  for (let k = 0; k < CURVE_FRAME_ANGLE.length; k++) CURVE_FRAME_ANGLE[k] -= ALIGN;
-}

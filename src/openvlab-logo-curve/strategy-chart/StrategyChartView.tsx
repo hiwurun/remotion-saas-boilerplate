@@ -2,20 +2,17 @@ import React from "react";
 import { SANS } from "../../shared/fonts";
 import {
   AREA_PATH,
-  CHART_LAYOUT,
   CONTAINER_HEIGHT,
   CONTAINER_WIDTH,
   LEGEND_ITEMS,
   LINE_SERIES,
+  LONG_CALL,
   type LiveLine,
   OVERLAY_LABELS,
   STAGE_LEFT,
   STAGE_SCALE,
   STAGE_TOP,
-  UNDERLYING_X,
-  X_TICKS,
-  Y_TICKS,
-  ZERO_AXIS_Y,
+  type StrategyModel,
   formatUnderlyingPrice,
   formatYAxisTickLabel,
   getGradientMiddleOffset,
@@ -41,6 +38,21 @@ export const CHART_COLORS = {
   muted: "#6B7280", // --muted-foreground
   border: "#E4E7EC", // --border
 } as const;
+
+export type ChartColors = { [K in keyof typeof CHART_COLORS]: string };
+
+/**
+ * Same variables resolved against the `.dark` block of vlab-frontend packages/ui/src/globals.css
+ * (--background oklch(0 0 0), --foreground oklch(0.96 0.006 260), --muted-foreground oklch(0.72 0.012 260),
+ * --border oklch(0.3 0.012 260); popover = dark card). Chart up/down/axis/brand keep their single values.
+ */
+export const CHART_COLORS_DARK: ChartColors = {
+  ...CHART_COLORS,
+  surface: "#000000",
+  foreground: "#EFF2F6",
+  muted: "#A0A5AC",
+  border: "#2A2E34",
+};
 
 export const CHART_SURFACE = CHART_COLORS.surface;
 
@@ -78,6 +90,8 @@ export type ChartCanvasProps = {
   axes: number;
   ticks: number;
   currentPrice: number;
+  /** Opacity of the current-price value / 当前价格 labels (defaults to `currentPrice`). */
+  currentPriceLabel?: number;
   breakEven: { chartX: number; leftPercent: number; value: string } | null;
   /** Top-to-bottom draw-on of the break-even line, 0..1. */
   breakEvenDraw: number;
@@ -86,7 +100,14 @@ export type ChartCanvasProps = {
   legend: Array<{ key: string; label: string; dashArray?: string; opacity: number }>;
   legendOpacity: number[];
   readout?: ChartReadout | null;
+  model?: StrategyModel;
+  colors?: ChartColors;
+  /** Popover surface behind tooltips (defaults to the theme surface). */
+  tooltipSurface?: string;
 };
+
+const useModel = (props: ChartCanvasProps) => props.model ?? LONG_CALL;
+const useColors = (props: ChartCanvasProps) => props.colors ?? CHART_COLORS;
 
 /** Per-index stagger inside one monotonic progress value. */
 export const stagger = (p: number, index: number, count: number, spread = 0.5) => {
@@ -110,6 +131,8 @@ const FixedSvgText: React.FC<
 );
 
 const FixedSvgTooltip: React.FC<{
+  surface: string;
+  border: string;
   text: string;
   textAnchor?: "start" | "middle" | "end";
   textFill: string;
@@ -118,16 +141,16 @@ const FixedSvgTooltip: React.FC<{
   widthPx: number;
   x: number;
   y: number;
-}> = ({ text, textAnchor = "middle", textFill, textFillOpacity, textOffsetXPx, widthPx, x, y }) => (
+}> = ({ surface, border, text, textAnchor = "middle", textFill, textFillOpacity, textOffsetXPx, widthPx, x, y }) => (
   <g transform={`translate(${x}, ${y}) scale(1, 1)`}>
     <rect
       x={0}
       y={0}
       width={widthPx}
       height={TOOLTIP_HEIGHT_PX}
-      fill={CHART_COLORS.surface}
+      fill={surface}
       fillOpacity={0.98}
-      stroke={CHART_COLORS.border}
+      stroke={border}
       strokeOpacity={0.85}
       rx={TOOLTIP_RADIUS_PX}
     />
@@ -148,12 +171,12 @@ const FixedSvgTooltip: React.FC<{
 const OverlayTextLabel: React.FC<{
   bold?: boolean;
   children: React.ReactNode;
-  color?: string;
+  color: string;
   left: string;
   opacity: number;
   top: string;
   transform: string;
-}> = ({ bold, children, color = CHART_COLORS.foreground, left, opacity, top, transform }) =>
+}> = ({ bold, children, color, left, opacity, top, transform }) =>
   opacity <= 0 ? null : (
     <span
       style={{
@@ -174,28 +197,30 @@ const OverlayTextLabel: React.FC<{
     </span>
   );
 
-const SeriesGradients: React.FC<{ line: LiveLine }> = ({ line }) => {
+const SeriesGradients: React.FC<{ line: LiveLine; c: ChartColors }> = ({ line, c }) => {
   const middleOffset = getGradientMiddleOffset(line.extent);
   const lowerStrokeOffset = Math.max(0, middleOffset - 0.05);
   const upperStrokeOffset = Math.min(1, middleOffset + 0.05);
   return (
     <React.Fragment>
       <linearGradient id={`${line.gradientIdBase}-fill`} x1="0" x2="0" y1="0" y2="1">
-        <stop offset={middleOffset} stopColor={CHART_COLORS.up} stopOpacity="1" />
-        <stop offset={middleOffset} stopColor={CHART_COLORS.down} stopOpacity="1" />
+        <stop offset={middleOffset} stopColor={c.up} stopOpacity="1" />
+        <stop offset={middleOffset} stopColor={c.down} stopOpacity="1" />
       </linearGradient>
       <linearGradient id={`${line.gradientIdBase}-stroke`} x1="0" x2="0" y1="0" y2="1">
-        <stop offset={lowerStrokeOffset} stopColor={CHART_COLORS.up} stopOpacity="1" />
-        <stop offset={middleOffset} stopColor={CHART_COLORS.zeroCross} stopOpacity="0.5" />
-        <stop offset={upperStrokeOffset} stopColor={CHART_COLORS.down} stopOpacity="1" />
+        <stop offset={lowerStrokeOffset} stopColor={c.up} stopOpacity="1" />
+        <stop offset={middleOffset} stopColor={c.zeroCross} stopOpacity="0.5" />
+        <stop offset={upperStrokeOffset} stopColor={c.down} stopOpacity="1" />
       </linearGradient>
     </React.Fragment>
   );
 };
 
 const ChartDefs: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
-  const { height, width } = CHART_LAYOUT;
-  const zeroAxisY = ZERO_AXIS_Y;
+  const m = useModel(props);
+  const c = useColors(props);
+  const { height, width } = m.CHART_LAYOUT;
+  const zeroAxisY = m.ZERO_AXIS_Y;
   return (
     <defs>
       <mask id={`stratBoundsMask${CHART_ID}`}>
@@ -231,22 +256,26 @@ const ChartDefs: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
       </linearGradient>
 
       {props.lines.map((line) => (
-        <SeriesGradients key={line.gradientIdBase} line={line} />
+        <SeriesGradients key={line.gradientIdBase} line={line} c={c} />
       ))}
-      {props.ghost ? <SeriesGradients line={props.ghost.line} /> : null}
+      {props.ghost ? <SeriesGradients line={props.ghost.line} c={c} /> : null}
     </defs>
   );
 };
 
 const ChartAxes: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
-  const { height, left, top } = CHART_LAYOUT;
+  const m = useModel(props);
+  const c = useColors(props);
+  const { height, left, top } = m.CHART_LAYOUT;
+  const X_TICKS = m.X_TICKS;
+  const Y_TICKS = m.Y_TICKS;
   return (
     <React.Fragment>
       <g transform={`translate(${left}, ${height + top})`}>
         {X_TICKS.map((tick, i) => (
           <g key={tick.value} transform={`translate(${tick.x}, 0)`} opacity={stagger(props.ticks, i, X_TICKS.length)}>
-            <line y2="6" x1="0.5" x2="0.5" stroke={CHART_COLORS.axis} strokeOpacity={0.3} />
-            <FixedSvgText fill={CHART_COLORS.axis} textAnchor="middle" x={0} y={AXIS_TICK_OFFSET_Y_PX}>
+            <line y2="6" x1="0.5" x2="0.5" stroke={c.axis} strokeOpacity={0.3} />
+            <FixedSvgText fill={c.axis} textAnchor="middle" x={0} y={AXIS_TICK_OFFSET_Y_PX}>
               {formatUnderlyingPrice(tick.value)}
             </FixedSvgText>
           </g>
@@ -256,8 +285,8 @@ const ChartAxes: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
       <g transform={`translate(${left - 6}, ${top})`}>
         {Y_TICKS.map((tick, i) => (
           <g key={tick.value} transform={`translate(0, ${tick.y})`} opacity={stagger(props.ticks, Y_TICKS.length - 1 - i, Y_TICKS.length)}>
-            <line x2="6" y1="0.5" y2="0.5" stroke={CHART_COLORS.axis} strokeOpacity={0.3} />
-            <FixedSvgText alignmentBaseline="middle" fill={CHART_COLORS.axis} textAnchor="end" x={-4} y={0}>
+            <line x2="6" y1="0.5" y2="0.5" stroke={c.axis} strokeOpacity={0.3} />
+            <FixedSvgText alignmentBaseline="middle" fill={c.axis} textAnchor="end" x={-4} y={0}>
               {formatYAxisTickLabel(tick.value)}
             </FixedSvgText>
           </g>
@@ -268,7 +297,11 @@ const ChartAxes: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
 };
 
 const ChartSeriesLayer: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
-  const { height, left, top, width } = CHART_LAYOUT;
+  const m = useModel(props);
+  const c = useColors(props);
+  const { height, left, top, width } = m.CHART_LAYOUT;
+  const ZERO_AXIS_Y = m.ZERO_AXIS_Y;
+  const UNDERLYING_X = m.UNDERLYING_X;
   const chartTransform = `translate(${left},${top})`;
   const be = props.breakEven;
   const beTop = top + 20;
@@ -276,7 +309,7 @@ const ChartSeriesLayer: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
   return (
     <React.Fragment>
       <line
-        stroke={CHART_COLORS.primary}
+        stroke={c.primary}
         strokeWidth={0.5}
         y1={top + ZERO_AXIS_Y + 0.5}
         y2={top + ZERO_AXIS_Y + 0.5}
@@ -327,13 +360,13 @@ const ChartSeriesLayer: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
       ) : null}
 
       <g opacity={props.axes}>
-        <line stroke={CHART_COLORS.axis} strokeOpacity={0.3} x1={0} x2={width} transform={`translate(${left}, ${height + top})`} />
-        <line stroke={CHART_COLORS.axis} strokeOpacity={0.3} y1={0} y2={height} transform={`translate(${left}, ${top})`} />
+        <line stroke={c.axis} strokeOpacity={0.3} x1={0} x2={width} transform={`translate(${left}, ${height + top})`} />
+        <line stroke={c.axis} strokeOpacity={0.3} y1={0} y2={height} transform={`translate(${left}, ${top})`} />
       </g>
 
       {props.currentPrice > 0 ? (
         <line
-          stroke={CHART_COLORS.primary}
+          stroke={c.primary}
           strokeWidth={0.5}
           y1={top + 8}
           y2={top + height}
@@ -345,7 +378,7 @@ const ChartSeriesLayer: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
 
       {be && props.breakEvenDraw > 0 ? (
         <line
-          stroke={CHART_COLORS.brand}
+          stroke={c.brand}
           strokeWidth="0.5"
           strokeDasharray="4,4"
           y1={beTop}
@@ -359,14 +392,16 @@ const ChartSeriesLayer: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
   );
 };
 
-const ChartReadoutLayer: React.FC<{ readout: ChartReadout }> = ({ readout }) => {
-  const { height, top } = CHART_LAYOUT;
+const ChartReadoutLayer: React.FC<{ readout: ChartReadout; m: StrategyModel; c: ChartColors; surface: string }> = ({ readout, m, c, surface }) => {
+  const { height, top } = m.CHART_LAYOUT;
   return (
     <g opacity={readout.opacity}>
-      <line stroke={CHART_COLORS.muted} strokeWidth="2" y1={top} y2={top + height} x1={readout.x} x2={readout.x} />
+      <line stroke={c.muted} strokeWidth="2" y1={top} y2={top + height} x1={readout.x} x2={readout.x} />
       <FixedSvgTooltip
+        surface={surface}
+        border={c.border}
         text={readout.priceText}
-        textFill={CHART_COLORS.brand}
+        textFill={c.brand}
         textOffsetXPx={TOOLTIP_LARGE_WIDTH_PX / 2}
         widthPx={TOOLTIP_LARGE_WIDTH_PX}
         x={readout.x - TOOLTIP_LARGE_WIDTH_PX / 2}
@@ -374,11 +409,13 @@ const ChartReadoutLayer: React.FC<{ readout: ChartReadout }> = ({ readout }) => 
       />
       {readout.points.map((point) => (
         <React.Fragment key={point.text.split(" ")[0]}>
-          <circle fill={CHART_COLORS.brand} stroke={CHART_COLORS.surface} strokeWidth="2" r="4" cx={readout.x} cy={point.y} />
+          <circle fill={c.brand} stroke={c.surface} strokeWidth="2" r="4" cx={readout.x} cy={point.y} />
           <FixedSvgTooltip
+            surface={surface}
+            border={c.border}
             text={point.text}
             textAnchor="start"
-            textFill={CHART_COLORS.foreground}
+            textFill={c.foreground}
             textFillOpacity={0.95}
             textOffsetXPx={7}
             widthPx={TOOLTIP_SMALL_WIDTH_PX}
@@ -391,15 +428,15 @@ const ChartReadoutLayer: React.FC<{ readout: ChartReadout }> = ({ readout }) => 
   );
 };
 
-const LegendPreview: React.FC<{ dashArray?: string; opacity: number }> = ({ dashArray, opacity }) => (
+const LegendPreview: React.FC<{ dashArray?: string; opacity: number; c: ChartColors }> = ({ dashArray, opacity, c }) => (
   <React.Fragment>
-    <line x1={0} x2={25} y1={0} y2={0} stroke={CHART_COLORS.surface} strokeWidth="5" strokeLinecap="round" />
+    <line x1={0} x2={25} y1={0} y2={0} stroke={c.surface} strokeWidth="5" strokeLinecap="round" />
     <line
       x1={0}
       x2={25}
       y1={0}
       y2={0}
-      stroke={CHART_COLORS.foreground}
+      stroke={c.foreground}
       strokeWidth="3"
       strokeDasharray={dashArray}
       opacity={opacity}
@@ -409,14 +446,16 @@ const LegendPreview: React.FC<{ dashArray?: string; opacity: number }> = ({ dash
 );
 
 const ChartLegend: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
-  const { left, top } = CHART_LAYOUT;
+  const m = useModel(props);
+  const c = useColors(props);
+  const { left, top } = m.CHART_LAYOUT;
   return (
     <g transform={`translate(${left + 8}, ${top + 8})`}>
       {props.legend.map((item, index) =>
         (props.legendOpacity[index] ?? 0) <= 0 ? null : (
           <g key={item.key} transform={`translate(0, ${18 * index})`} opacity={props.legendOpacity[index]}>
-            <LegendPreview dashArray={item.dashArray} opacity={item.opacity} />
-            <FixedSvgText fill={CHART_COLORS.foreground} x={33} y={4}>
+            <LegendPreview dashArray={item.dashArray} opacity={item.opacity} c={c} />
+            <FixedSvgText fill={c.foreground} x={33} y={4}>
               {item.label}
             </FixedSvgText>
           </g>
@@ -427,6 +466,8 @@ const ChartLegend: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
 };
 
 const ChartOverlayLabels: React.FC<{ props: ChartCanvasProps }> = ({ props }) => {
+  const OVERLAY_LABELS = useModel(props).OVERLAY_LABELS;
+  const c = useColors(props);
   const be = props.breakEven;
   return (
     <React.Fragment>
@@ -435,7 +476,8 @@ const ChartOverlayLabels: React.FC<{ props: ChartCanvasProps }> = ({ props }) =>
         left={`${OVERLAY_LABELS.currentPriceLabelLeftPercent}%`}
         top={`calc(${OVERLAY_LABELS.currentPriceLabelTopPercent}% - 28px)`}
         transform="translateX(-50%)"
-        opacity={props.currentPrice}
+        color={c.foreground}
+        opacity={props.currentPriceLabel ?? props.currentPrice}
       >
         {OVERLAY_LABELS.currentPriceValue}
       </OverlayTextLabel>
@@ -443,7 +485,8 @@ const ChartOverlayLabels: React.FC<{ props: ChartCanvasProps }> = ({ props }) =>
         left={`${OVERLAY_LABELS.currentPriceLabelLeftPercent}%`}
         top={`calc(${OVERLAY_LABELS.currentPriceLabelTopPercent}% - 16px)`}
         transform="translateX(-50%)"
-        opacity={props.currentPrice}
+        color={c.foreground}
+        opacity={props.currentPriceLabel ?? props.currentPrice}
       >
         当前价格
       </OverlayTextLabel>
@@ -453,7 +496,7 @@ const ChartOverlayLabels: React.FC<{ props: ChartCanvasProps }> = ({ props }) =>
         <React.Fragment>
           <OverlayTextLabel
             bold
-            color={CHART_COLORS.brand}
+            color={c.brand}
             left={`${be.leftPercent}%`}
             top={`${OVERLAY_LABELS.breakEven.priceLabelTopPercent}%`}
             transform="translateX(-50%)"
@@ -463,7 +506,7 @@ const ChartOverlayLabels: React.FC<{ props: ChartCanvasProps }> = ({ props }) =>
           </OverlayTextLabel>
           <OverlayTextLabel
             bold
-            color={CHART_COLORS.brand}
+            color={c.brand}
             left={`${be.leftPercent}%`}
             top={`${OVERLAY_LABELS.breakEven.tagLabelTopPercent}%`}
             transform="translateX(-50%)"
@@ -490,7 +533,9 @@ export const StrategyChartCanvas: React.FC<ChartCanvasProps> = (props) => (
       <ChartDefs props={props} />
       <ChartAxes props={props} />
       <ChartSeriesLayer props={props} />
-      {props.readout && props.readout.opacity > 0 ? <ChartReadoutLayer readout={props.readout} /> : null}
+      {props.readout && props.readout.opacity > 0 ? (
+        <ChartReadoutLayer readout={props.readout} m={useModel(props)} c={useColors(props)} surface={props.tooltipSurface ?? useColors(props).surface} />
+      ) : null}
       <ChartLegend props={props} />
     </svg>
     <ChartOverlayLabels props={props} />
