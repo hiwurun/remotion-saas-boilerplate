@@ -10,7 +10,7 @@ import { OPENVLAB_DEFAULTS, OpenVLabSchema } from "./openvlab-market/schema";
 import { OpenVlabSurfVideo } from "./openvlab-surf/OpenVlabSurfVideo";
 import { OpenVlabSurfCover, OpenVlabSurfCover43, OpenVlabSurfCover34 } from "./openvlab-surf/Cover";
 import { OpenVlabCloudVideo, FPS as CLOUD_FPS, H as CLOUD_H, TOTAL as CLOUD_TOTAL, W as CLOUD_W } from "./openvlab-cloud/OpenVlabCloudVideo";
-import { OpenVlabLogoRay, FPS as RAY_FPS, H as RAY_H, TOTAL as RAY_TOTAL, W as RAY_W } from "./openvlab-logo-ray/OpenVlabLogoRay";
+import { OpenVlabLogoCurve, FPS as CURVE_FPS, H as CURVE_H, TOTAL as CURVE_TOTAL, W as CURVE_W } from "./openvlab-logo-curve/OpenVlabLogoCurve";
 import { FPS as SURF_FPS, H as SURF_H, TOTAL as SURF_TOTAL, W as SURF_W } from "./openvlab-surf/timeline";
 
 export const RemotionRoot: React.FC = () => {
@@ -185,7 +185,7 @@ export const RemotionRoot: React.FC = () => {
       />
       <Composition id="openvlab-surf" component={OpenVlabSurfVideo} width={SURF_W} height={SURF_H} fps={SURF_FPS} durationInFrames={SURF_TOTAL} />
       <Composition id="openvlab-cloud" component={OpenVlabCloudVideo} width={CLOUD_W} height={CLOUD_H} fps={CLOUD_FPS} durationInFrames={CLOUD_TOTAL} />
-      <Composition id="openvlab-logo-ray" component={OpenVlabLogoRay} width={RAY_W} height={RAY_H} fps={RAY_FPS} durationInFrames={RAY_TOTAL} />
+      <Composition id="openvlab-logo-curve" component={OpenVlabLogoCurve} width={CURVE_W} height={CURVE_H} fps={CURVE_FPS} durationInFrames={CURVE_TOTAL} />
       <Still id="openvlab-surf-cover-16x9" component={OpenVlabSurfCover} width={1920} height={1080} />
       <Still id="openvlab-surf-cover-4x3" component={OpenVlabSurfCover43} width={1440} height={1080} />
       <Still id="openvlab-surf-cover-3x4" component={OpenVlabSurfCover34} width={1080} height={1440} />
