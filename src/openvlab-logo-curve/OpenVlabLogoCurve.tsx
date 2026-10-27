@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { AbsoluteFill, Easing, interpolate, interpolateColors, useCurrentFrame, useVideoConfig } from "remotion";
 import { BrandMark } from "../openvlab-market/components/BrandMark";
 import { CLAMP, EASE, EASE_OUT } from "../shared/motion";
@@ -26,6 +26,8 @@ import {
 /**
  * Single trial shot: the OpenVlab mark settles, its amber disc drains into the V, and the V's stroke unbends
  * into the smooth T+0 PnL curve of the strategy chart (bare stroke, ready for axes/colour overlays).
+ *
+ * No shimmer / flicker: no BrandMark glow, no expanding rim ring, no end cross-fade, no animated bg glow.
  */
 export const FPS = 60;
 export const W = 1920;
@@ -81,10 +83,10 @@ export const OpenVlabLogoCurve: React.FC = () => {
   const t = frame / fps;
 
   const fadeIn = interpolate(t, [0, 0.8], [0, 1], { ...CLAMP, easing: SOFT_IN });
-  const intro = interpolate(t, [0, 1.45], [0, 1], { ...CLAMP, easing: EASE_OUT });
+  // Hold logo scale still during morph so subpixel SVG rescales don't shimmer.
+  const intro = interpolate(t, [0, 0.9], [0, 1], { ...CLAMP, easing: EASE_OUT });
   const ignite = interpolate(t, [1.0, 1.45], [0, 1], { ...CLAMP, easing: EASE });
-  const discOut = interpolate(t, [1.1, 1.6], [0, 1], { ...CLAMP, easing: EASE });
-  const ring = interpolate(t, [1.12, 1.95], [0, 1], { ...CLAMP, easing: EASE_OUT });
+  const discOut = interpolate(t, [1.1, 1.55], [0, 1], { ...CLAMP, easing: EASE });
   const bend = interpolate(t, [1.45, 2.65], [0, 1], { ...CLAMP, easing: EASE });
   const grow = interpolate(t, [1.55, 2.85], [0, 1], { ...CLAMP, easing: EASE });
   const thin = interpolate(t, [1.45, 2.35], [0, 1], { ...CLAMP, easing: EASE });
@@ -94,48 +96,45 @@ export const OpenVlabLogoCurve: React.FC = () => {
 
   const k = 0.86 + 0.09 * intro;
   const discOpacity = fadeIn * (1 - discOut);
-  const points = morphOutline({ k, bend, grow, thin, travel });
+  const points = useMemo(
+    () => morphOutline({ k, bend, grow, thin, travel }),
+    [k, bend, grow, thin, travel],
+  );
   const fill = interpolateColors(t, [1.9, 2.8], [GOLD, LINE]);
 
   return (
     <AbsoluteFill style={{ backgroundColor: BG, overflow: "hidden" }}>
-      <div
-        style={{
-          position: "absolute",
-          left: W / 2 - LOGO_CENTER * k,
-          top: H / 2 - LOGO_CENTER * k,
-          width: LOGO_SIZE,
-          height: LOGO_SIZE,
-          transformOrigin: "0 0",
-          transform: `scale(${k})`,
-          opacity: discOpacity,
-          visibility: discOpacity > 0.001 ? "visible" : "hidden",
-        }}
-      >
-        <BrandMark size={LOGO_SIZE} src={LOGO_SRC} glow={0.9 * (1 - discOut * 0.6)} />
-      </div>
+      {discOpacity > 0.001 ? (
+        <div
+          style={{
+            position: "absolute",
+            left: W / 2 - LOGO_CENTER * k,
+            top: H / 2 - LOGO_CENTER * k,
+            width: LOGO_SIZE,
+            height: LOGO_SIZE,
+            transformOrigin: "0 0",
+            transform: `scale(${k})`,
+            opacity: discOpacity,
+          }}
+        >
+          {/* glow=0: BrandMark radial halo was a major flicker source */}
+          <BrandMark size={LOGO_SIZE} src={LOGO_SRC} glow={0} />
+        </div>
+      ) : null}
 
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ position: "absolute", inset: 0 }}>
-        <circle
-          cx={W / 2}
-          cy={H / 2}
-          r={(206 + 120 * ring) * k}
-          fill="none"
-          stroke="#FFE9A0"
-          strokeWidth={2.5}
-          opacity={0.55 * (1 - ring) * Math.min(1, ring * 6)}
-        />
         <g opacity={ignite}>
-          <polygon points={points} fill={fill} visibility={settled ? "hidden" : "visible"} />
-          <path
-            d={CURVE_PATH}
-            fill="none"
-            stroke={LINE}
-            strokeWidth={CURVE_WIDTH}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            visibility={settled ? "visible" : "hidden"}
-          />
+          {!settled ? <polygon points={points} fill={fill} /> : null}
+          {settled ? (
+            <path
+              d={CURVE_PATH}
+              fill="none"
+              stroke={LINE}
+              strokeWidth={CURVE_WIDTH}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ) : null}
         </g>
       </svg>
     </AbsoluteFill>
