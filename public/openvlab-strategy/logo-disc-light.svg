@@ -1,0 +1,93 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="512"
+  height="512"
+  viewBox="0 0 512 512"
+  fill="none"
+  role="img"
+  aria-label="OpenVlab logo"
+>
+  <defs>
+    <radialGradient id="shellGlass" cx="24%" cy="20%" r="78%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.84" />
+      <stop offset="18%" stop-color="#FFF9E7" stop-opacity="0.34" />
+      <stop offset="48%" stop-color="#FFE8A8" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#FFE8A8" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="shellShade" cx="74%" cy="78%" r="82%">
+      <stop offset="0%" stop-color="#7E4A00" stop-opacity="0.04" />
+      <stop offset="54%" stop-color="#7B4700" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#C9B98F" stop-opacity="0.07" />
+    </radialGradient>
+    <radialGradient id="shellAmber" cx="60%" cy="90%" r="46%">
+      <stop offset="0%" stop-color="#FFD972" stop-opacity="0.48" />
+      <stop offset="40%" stop-color="#FFC43A" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#FFC43A" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="shellRim" x1="106" y1="96" x2="410" y2="426">
+      <stop offset="0%" stop-color="#FFFDF6" stop-opacity="0.64" />
+      <stop offset="24%" stop-color="#C7BCA8" stop-opacity="0.28" />
+      <stop offset="68%" stop-color="#E6D9BC" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#F4C86A" stop-opacity="0.5" />
+    </linearGradient>
+    <radialGradient id="coreGradient" cx="50%" cy="50%" r="78%">
+      <stop offset="0%" stop-color="hsl(51.43, 99.21%, 50.2%)" />
+      <stop offset="42%" stop-color="hsl(53.68, 97.63%, 50.39%)" />
+      <stop offset="78%" stop-color="hsl(55.36, 98.98%, 61.57%)" />
+      <stop offset="100%" stop-color="hsl(55.33, 98.82%, 66.86%)" />
+    </radialGradient>
+    <radialGradient id="coreShade" cx="70%" cy="76%" r="78%">
+      <stop offset="0%" stop-color="#D28A00" stop-opacity="0.01" />
+      <stop offset="58%" stop-color="#C57B00" stop-opacity="0.035" />
+      <stop offset="100%" stop-color="#9D5D00" stop-opacity="0.11" />
+    </radialGradient>
+    <radialGradient id="coreGlow" cx="30%" cy="26%" r="40%">
+      <stop offset="0%" stop-color="#FFF9CF" stop-opacity="0.22" />
+      <stop offset="42%" stop-color="#FFF3AE" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#FFF0A1" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="coreBowl" cx="58%" cy="84%" r="44%">
+      <stop offset="0%" stop-color="#FFD96C" stop-opacity="0.14" />
+      <stop offset="42%" stop-color="#FFC93C" stop-opacity="0.07" />
+      <stop offset="100%" stop-color="#E39B00" stop-opacity="0.12" />
+    </radialGradient>
+    <linearGradient id="coreEdge" x1="164" y1="124" x2="352" y2="392">
+      <stop offset="0%" stop-color="#FFF5BF" stop-opacity="0.05" />
+      <stop offset="34%" stop-color="#FFED9E" stop-opacity="0.02" />
+      <stop offset="100%" stop-color="#B36B00" stop-opacity="0.045" />
+    </linearGradient>
+    <clipPath id="coreClip">
+      <circle cx="256" cy="256" r="188" />
+    </clipPath>
+    <linearGradient id="vFill" x1="366" y1="168" x2="198" y2="370">
+      <stop offset="0%" stop-color="#2B2422" />
+      <stop offset="100%" stop-color="#120F0E" />
+    </linearGradient>
+    <filter id="vShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000000" flood-opacity="0.16" />
+    </filter>
+  </defs>
+
+  <circle cx="256" cy="256" r="206" fill="#F4E5A8" fill-opacity="0.1" />
+  <circle cx="256" cy="256" r="206" fill="url(#shellGlass)" />
+  <circle cx="256" cy="256" r="206" fill="url(#shellShade)" />
+  <circle cx="256" cy="256" r="206" fill="url(#shellAmber)" />
+  <circle cx="256" cy="256" r="205" fill="none" stroke="url(#shellRim)" stroke-width="1.5" />
+  <circle cx="256" cy="256" r="188" fill="url(#coreGradient)" />
+  <circle cx="256" cy="256" r="188" fill="url(#coreShade)" />
+  <circle cx="256" cy="256" r="188" fill="url(#coreGlow)" />
+  <circle cx="256" cy="256" r="188" fill="url(#coreBowl)" />
+  <circle cx="256" cy="256" r="188" fill="url(#coreEdge)" />
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#FFEEAE" stroke-opacity="0.44" stroke-width="2" />
+  <circle cx="256" cy="256" r="203" fill="none" stroke="#FFF6D3" stroke-opacity="0.34" stroke-width="1.5" />
+  <g clip-path="url(#coreClip)">
+    <ellipse cx="178" cy="146" rx="30" ry="6.5" fill="#FFF9E3" fill-opacity="0.5" transform="rotate(-24 178 146)" />
+    <ellipse cx="164" cy="160" rx="21" ry="5.2" fill="#FFFCEB" fill-opacity="0.4" transform="rotate(-24 164 160)" />
+    <ellipse cx="151" cy="174" rx="13" ry="4" fill="#FFFFFF" fill-opacity="0.24" transform="rotate(-24 151 174)" />
+    <ellipse cx="202" cy="140" rx="10" ry="3.4" fill="#FFF4C8" fill-opacity="0.18" transform="rotate(-18 202 140)" />
+  </g>
+  <ellipse cx="139" cy="145" rx="15" ry="4.2" fill="#FFFFFF" fill-opacity="0.08" transform="rotate(-24 139 145)" />
+  <ellipse cx="362" cy="260" rx="4" ry="58" fill="#7B5D34" fill-opacity="0.02" transform="rotate(8 362 260)" />
+  <ellipse cx="304" cy="390" rx="84" ry="12" fill="#FFD979" fill-opacity="0.12" transform="rotate(4 304 390)" />
+
+</svg>

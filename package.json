@@ -9,11 +9,14 @@
     "render:landscape": "remotion render Lumina-Landscape out/lumina-landscape.mp4",
     "render:portrait": "remotion render Lumina-Portrait out/lumina-portrait.mp4",
     "render:surf": "remotion render openvlab-surf out/openvlab-surf.mp4 --gl=angle",
+    "render:strategy": "remotion render openvlab-strategy out/openvlab-strategy.mp4",
+    "render:hooklab": "remotion render openvlab-strategy-hook-lab out/openvlab-strategy-hooklab.mp4 --gl=angle",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@remotion/cli": "4.0.535",
     "@remotion/google-fonts": "4.0.535",
+    "@remotion/paths": "4.0.535",
     "@remotion/tailwind-v4": "4.0.535",
     "@remotion/transitions": "4.0.535",
     "@remotion/zod-types": "4.0.535",

@@ -10,6 +10,8 @@ import { OPENVLAB_DEFAULTS, OpenVLabSchema } from "./openvlab-market/schema";
 import { OpenVlabSurfVideo } from "./openvlab-surf/OpenVlabSurfVideo";
 import { OpenVlabSurfCover, OpenVlabSurfCover43, OpenVlabSurfCover34 } from "./openvlab-surf/Cover";
 import { OpenVlabCloudVideo, FPS as CLOUD_FPS, H as CLOUD_H, TOTAL as CLOUD_TOTAL, W as CLOUD_W } from "./openvlab-cloud/OpenVlabCloudVideo";
+import { OpenVlabStrategyVideo, FPS as STRATEGY_FPS, H as STRATEGY_H, TOTAL as STRATEGY_TOTAL, W as STRATEGY_W } from "./openvlab-strategy/OpenVlabStrategyVideo";
+import { HookLabVideo, FPS as HOOKLAB_FPS, H as HOOKLAB_H, TOTAL as HOOKLAB_TOTAL, W as HOOKLAB_W } from "./openvlab-strategy-hook-lab/HookLabVideo";
 import { FPS as SURF_FPS, H as SURF_H, TOTAL as SURF_TOTAL, W as SURF_W } from "./openvlab-surf/timeline";
 
 export const RemotionRoot: React.FC = () => {
@@ -184,6 +186,8 @@ export const RemotionRoot: React.FC = () => {
       />
       <Composition id="openvlab-surf" component={OpenVlabSurfVideo} width={SURF_W} height={SURF_H} fps={SURF_FPS} durationInFrames={SURF_TOTAL} />
       <Composition id="openvlab-cloud" component={OpenVlabCloudVideo} width={CLOUD_W} height={CLOUD_H} fps={CLOUD_FPS} durationInFrames={CLOUD_TOTAL} />
+      <Composition id="openvlab-strategy" component={OpenVlabStrategyVideo} defaultProps={{ debug: "" }} width={STRATEGY_W} height={STRATEGY_H} fps={STRATEGY_FPS} durationInFrames={STRATEGY_TOTAL} />
+      <Composition id="openvlab-strategy-hook-lab" component={HookLabVideo} width={HOOKLAB_W} height={HOOKLAB_H} fps={HOOKLAB_FPS} durationInFrames={HOOKLAB_TOTAL} />
       <Still id="openvlab-surf-cover-16x9" component={OpenVlabSurfCover} width={1920} height={1080} />
       <Still id="openvlab-surf-cover-4x3" component={OpenVlabSurfCover43} width={1440} height={1080} />
       <Still id="openvlab-surf-cover-3x4" component={OpenVlabSurfCover34} width={1080} height={1440} />

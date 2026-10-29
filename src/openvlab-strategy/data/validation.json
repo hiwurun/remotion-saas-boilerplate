@@ -1,0 +1,80 @@
+{
+  "rows": [
+    {
+      "name": "净支出",
+      "screenshot": 42260,
+      "computed": 42260,
+      "diff": 0
+    },
+    {
+      "name": "到期盈亏平衡 低",
+      "screenshot": 6177.4,
+      "computed": 6177.4,
+      "diff": 0
+    },
+    {
+      "name": "到期盈亏平衡 高",
+      "screenshot": 7022.6,
+      "computed": 7022.6,
+      "diff": 0
+    },
+    {
+      "name": "当前日曲线盈亏平衡 低",
+      "screenshot": 6476.9,
+      "computed": 6477.09,
+      "diff": 0.19
+    },
+    {
+      "name": "当前日曲线盈亏平衡 高",
+      "screenshot": 6682.5,
+      "computed": 6682.4,
+      "diff": -0.1
+    },
+    {
+      "name": "ATM(6550) 10/29",
+      "screenshot": -739,
+      "computed": -739.15,
+      "diff": -0.15
+    },
+    {
+      "name": "ATM(6550) 到期",
+      "screenshot": -37260,
+      "computed": -37260,
+      "diff": 0
+    },
+    {
+      "name": "胜率 %",
+      "screenshot": 43,
+      "computed": 43,
+      "diff": 0
+    },
+    {
+      "name": "Delta",
+      "screenshot": -275.8,
+      "computed": -275.76,
+      "diff": 0.04
+    },
+    {
+      "name": "Vega",
+      "screenshot": 1353.4,
+      "computed": 1353.41,
+      "diff": 0.01
+    },
+    {
+      "name": "Gamma",
+      "screenshot": 642.7,
+      "computed": 642.72,
+      "diff": 0.02
+    },
+    {
+      "name": "Theta",
+      "screenshot": -1242.2,
+      "computed": -1242.25,
+      "diff": -0.05
+    }
+  ],
+  "dte0": 22.976296296296297,
+  "impliedBackendDte": 24.617626333663367,
+  "calibratedVol": 0.314527,
+  "fileVol": 0.3121
+}
