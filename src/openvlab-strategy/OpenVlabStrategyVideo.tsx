@@ -12,9 +12,10 @@ import { FPS, H, HOOK, TOTAL, W } from "./timeline";
 export { FPS, H, TOTAL, W };
 
 /**
- * v6 「一秒之后，不只是少了一秒」 — story-first cut (37.5 s):
+ * v7 「一秒之后，不只是少了一秒」 — story-first cut (52 s):
  * Play -> 3D (price stays, the combo bleeds) -> the 6550 row, day by day -> two brackets -> conclusion ->
- * 曲线 sweep -> seller's view -> 1-day, −1 % band -> question -> V -> logo -> f2249 == f0.
+ * 曲线 sweep -> seller's view -> 1-day, −1 % band -> question ->
+ * time value (4,542 covers the 1% move; the 6550 gap is named, then it drains to zero) -> V -> logo -> f3119 == f0.
  * All frames are global (see beats.ts / open/timeline.ts).
  */
 export const OpenVlabStrategyVideo: React.FC<{ debug?: string }> = ({ debug = "" }) => {

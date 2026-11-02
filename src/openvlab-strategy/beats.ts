@@ -1,9 +1,10 @@
 import { Easing } from "remotion";
 
 /**
- * v6 beat table — story-first cut (global frames @60fps, TOTAL 2250 = 37.5 s, f2249 == f0).
+ * v7 beat table — story-first cut (global frames @60fps, TOTAL 3120 = 52 s, f3119 == f0).
  * The opening (title → Play → door → 3D → flatten into the table) is timed in open/timeline.ts (O) and ends at HOOK = 684.
  * Every morph / camera move glides 48 f (0.8 s) on MORPH = cubic-bezier(.45,0,.15,1); the iris and the final shrink are eased by AREA.
+ * v7 inserts a time-value coda after the question (ans → unflip → rewind → gap → settle) before the same ending.
  */
 export const HOOK = 684;
 
@@ -44,15 +45,23 @@ export const B = {
   pull: [1822, 1870], // camera back to 1:1, chart dims
   q: [1840, 1876], // 「每天多收的那几千块，够不够赔一次 1% 的波动？」
   qOut: [2000, 2024],
-  undim: [2000, 2040],
-  /* ---- ending */
-  unflip: [2010, 2058], // the curve flips back and settles on the expiry V
-  lift: [2058, 2106], // the V lifts off the chart to the logo position; chart fades
-  logo: [2094, 2134], // straight V -> logo centerline, disc grows, glyph swaps in
-  iris: [2098, 2146], // light world closes (by area) onto the disc
-  theme: [2126, 2162], // 「一秒之后，不只是少了一秒。」
-  out: [2201, 2249], // theme sinks, disc shrinks (by area) to 0 -> f2249 == f0
-  end: 2250,
+  /* ---- time value: answer the question, then name the gap between today's curve and the expiry V */
+  ans: [2032, 2080], // 4,542 and 3,568 glide out to the centre
+  ansLine: [2088, 2136], // 「最后一天收的，够赔一次 1% 的波动。」
+  ansOut: [2304, 2352],
+  unflip: [2340, 2388], // seller → buyer, still on the 1-day curve
+  rewind: [2400, 2448], // dte 1 → today: the curve lifts off the V, the gap opens
+  tv: [2400, 2448], // bracket grows with the rewind: the whole 6550 distance is time value
+  formula: [2472, 2520], // ledger: 现在值 = 内在价值 + 时间价值
+  formulaOut: [2700, 2736],
+  settle: [2724, 2940], // dte today → 0, linear in days so the decay itself accelerates; bracket counts down to 0
+  /* ---- ending (same internal offsets as v6, shifted to follow the coda) */
+  lift: [2940, 2988], // the V lifts off the chart to the logo position; chart fades
+  logo: [2976, 3016], // straight V -> logo centerline, disc grows, glyph swaps in
+  iris: [2980, 3028], // light world closes (by area) onto the disc
+  theme: [3008, 3044], // 「一秒之后，不只是少了一秒。」
+  out: [3083, 3119], // theme sinks, disc shrinks (by area) to 0 -> f3119 == f0
+  end: 3120,
 } as const;
 
 export const MORPH = Easing.bezier(0.45, 0, 0.15, 1);

@@ -70,9 +70,11 @@ export type ChartProps = {
   beOp?: number;
   /** opacity of the 当前价 marker (inside markerOp) */
   priceOp?: number;
+  /** extra fade for the intermediate (non-expiry) ghost curve */
+  midOp?: number;
 };
 
-export const StrategyChart: React.FC<ChartProps> = ({ model, dte, x0, x1, axesOp = 1, legendOp = 1, markerOp = 1, draw = 1, morph, op = 1, secondaryOp = 1, fillOp = 1, lineOp = 1, beOp = 1, priceOp = 1 }) => {
+export const StrategyChart: React.FC<ChartProps> = ({ model, dte, x0, x1, axesOp = 1, legendOp = 1, markerOp = 1, draw = 1, morph, op = 1, secondaryOp = 1, fillOp = 1, lineOp = 1, beOp = 1, priceOp = 1, midOp = 1 }) => {
   const sc = makeScales(x0, x1);
   const zeroY = sc.y(0);
   const lineDtes = lineDtesFor(dte);
@@ -154,7 +156,7 @@ export const StrategyChart: React.FC<ChartProps> = ({ model, dte, x0, x1, axesOp
             // v6: style + fade keyed on the line's own dte (the 0.25·DTE0 line fades as the slider passes it; the expiry line merges into the current curve at dte -> 0)
             const mid = l.d > 0;
             const k = mid ? Math.min(1, Math.max(0, (dte - 0.25 * DTE0) / 0.8)) : Math.min(1, Math.max(0, dte / 0.3));
-            return <path key={l.d} d={l.path} fill="none" stroke="url(#scStroke)" strokeWidth={2} strokeLinecap="round" strokeDasharray={mid ? "7,4" : "2,3"} opacity={(mid ? 0.8 : 0.65) * secondaryOp * k} />;
+            return <path key={l.d} d={l.path} fill="none" stroke="url(#scStroke)" strokeWidth={2} strokeLinecap="round" strokeDasharray={mid ? "7,4" : "2,3"} opacity={(mid ? 0.8 * midOp : 0.65) * secondaryOp * k} />;
           })}
           <path d={area} fill="url(#scFill)" mask="url(#scFillMask)" opacity={0.8 * fillOp * (1 - morphLime)} />
           {lineOp > 0 && <path d={lines[0].path} fill="none" stroke="url(#scStroke)" strokeWidth={2} strokeLinecap="round" opacity={(1 - morphLime) * lineOp} />}
