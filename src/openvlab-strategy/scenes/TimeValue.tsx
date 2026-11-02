@@ -7,15 +7,15 @@ import { C, THIN } from "../tokens";
 import { DTE0 } from "../model/model";
 import { easeIO, lerp, ramp } from "../timeline";
 import { B, mo } from "../beats";
+import { dteAt } from "../curve";
 import { X_DOMAIN_END, contentToWorld, makeScales } from "../components/StrategyChart";
 
 /**
- * v7 coda, after the question and before the logo.
- * The two numbers already on the chart (last day 4,542 vs a 1% move 3,568) answer 「够不够」.
- * Then the chart flips back to the buyer and rewinds to today: the vertical gap at 6550
- * between today's curve and the expiry payoff IS the remaining time value
- * (value − intrinsic, price held still). A ledger splits 现在值 = 内在价值 + 时间价值.
- * The settle plays that gap back down to zero — the same decay, now named.
+ * v8: the time-value gap rides the single sweep.
+ * Before the slider moves, a bracket at 6550 (today's curve vs the expiry payoff) and a ledger
+ * name that distance: 现在值 = 内在价值 + 时间价值. The sweep then presses the curve to the V
+ * and a sky number counts the same gap down to zero. There is no second walk.
+ * The answer card (4,542 vs 3,568) still comes later, once the chart is in the seller's view.
  */
 
 const S = 6550;
@@ -86,24 +86,23 @@ export const TimeOverlay: React.FC<{ f: number }> = ({ f }) => {
   );
 };
 
-/** Countdown stays in the empty sky above the curve, so the shrinking bracket never has to carry the type. */
+/** Countdown stays in the empty sky above the curve while the one sweep drains the gap. */
 const SettleReadout: React.FC<{ f: number }> = ({ f }) => {
-  const inn = ramp(f, B.settle[0] - 4, B.settle[0] + 18, easeIO);
-  const out = ramp(f, B.settle[1] - 16, B.settle[1] + 6, easeIO);
+  const inn = ramp(f, B.sweep[0] - 2, B.sweep[0] + 20, easeIO);
+  const out = ramp(f, B.sweep[1] - 28, B.sweep[1] + 8, easeIO);
   const op = inn * (1 - out);
   if (op < 0.001) return null;
-  const dte = lerp(DTE0, 0, mo(f, B.settle, (t) => t));
   return (
     <div style={{ position: "absolute", left: 0, width: W, top: 236, textAlign: "center", opacity: op, pointerEvents: "none" }}>
       <div style={{ fontFamily: THIN, fontSize: 22, letterSpacing: "0.22em", color: C.theta, marginBottom: 6 }}>时间价值</div>
-      <div style={{ fontFamily: MONO, fontSize: 76, fontWeight: 600, color: C.theta, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{fmt(liveTv(dte))}</div>
+      <div style={{ fontFamily: MONO, fontSize: 76, fontWeight: 600, color: C.theta, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{fmt(liveTv(dteAt(f)))}</div>
     </div>
   );
 };
 
 /* ---------------------------------------------------------------- gap + ledger (content-native, inside the scaled panel) */
 export const TimeGap: React.FC<{ f: number; dte: number }> = ({ f, dte }) => {
-  const gapP = mo(f, B.tv) * (1 - ramp(f, B.settle[1] - 18, B.lift[0], easeIO));
+  const gapP = mo(f, B.tv) * (1 - ramp(f, B.sweep[1] - 24, B.sweep[1] + 12, easeIO));
   if (gapP < 0.001 || f < B.tv[0] - 2) return null;
   const yNow = SC.y(MODEL.profit(S, dte));
   const yExp = SC.y(MODEL.profit(S, 0));
@@ -115,8 +114,8 @@ export const TimeGap: React.FC<{ f: number; dte: number }> = ({ f, dte }) => {
   const ledgerP = thetaHotP(f);
   const onLine = 1 - ledgerP;
   const tv = liveTv(dte);
-  // the bracket label hands off to a fixed screen number at the start of the settle, before the curve can reach it
-  const hand = ramp(f, B.settle[0] - 6, B.settle[0] + 16, easeIO);
+  // once the sweep starts, the sky number takes the countdown so the type doesn't ride the shrinking gap
+  const hand = ramp(f, B.sweep[0] - 10, B.sweep[0] + 16, easeIO);
   const numOp = gapP * onLine * (1 - hand) * (len > 12 ? 1 : 0);
   const pillH = 148;
   const pillTop = Math.max(PLOT.y + 4, Math.min(PLOT.y + PLOT.h - pillH - 4, mid - pillH / 2));
