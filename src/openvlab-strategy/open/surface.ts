@@ -25,7 +25,7 @@ export const ZC = DEPTH / 2;
 export const DEPTH_UNITS = 3.7;
 
 const T = MODEL.timeline;
-const DTE0 = T[0].dte;
+export const DTE0 = T[0].dte;
 /** geometry only: the expiry payoff has a sharp kink at the money; a few % of the time value is kept so the last rows stay a smooth sheet instead of a folded flap */
 const DTE_FLOOR = 0;
 const softDte = (d: number) => Math.sqrt(Math.max(0, d) ** 2 + DTE_FLOOR ** 2); // smooth max(d, floor): C-infinity, so the glow point path has no kink
@@ -102,3 +102,25 @@ export const heatTextureData = (): Uint8Array<ArrayBuffer> => {
     }
   return out;
 };
+
+/* ---- v7 box: the chart box the surface collapses inside (X = price, Z = calendar, Y = P&L, all in world units) ---- */
+export const STRIKE = CHAIN.strike; // 6600: the expiry V has its kink here
+export const xOfPrice = (p: number) => ((p - P_LO) / (P_HI - P_LO) * 2 - 1) * X_HALF;
+export const yOfPnl = (v: number) => shape(v * Y_SCALE);
+/** calendar fraction of "days left" (23 clamps to the first day) */
+export const tOfDays = (d: number) => 1 - Math.min(d, DTE0) / DTE0;
+/** exact P&L height at (price, calendar fraction) */
+export const surfY = (p: number, t: number) => yOfPnl(MODEL.profit(p, softDte(DTE0 * (1 - Math.min(1, Math.max(0, t))))));
+export const PNL_LO = -45000;
+export const PNL_HI = 25000;
+export const BOX = { x0: -X_HALF, x1: X_HALF, z0: 0, z1: DEPTH, y0: yOfPnl(PNL_LO), y1: yOfPnl(PNL_HI) } as const;
+export const TICKS = {
+  price: [6250, 6400, 6550, 6700, 6850],
+  days: [23, 15, 7, 2, 0],
+  pnl: [20000, 0, -20000, -40000],
+  pnlGrid: [20000, 10000, 0, -10000, -20000, -30000, -40000],
+} as const;
+/** hero-line price samples: dense, and the strike itself so the expiry kink is a true corner */
+export const HERO_P: number[] = Array.from(new Set([...Array.from({ length: 321 }, (_, i) => P_LO + ((P_HI - P_LO) * i) / 320), STRIKE])).sort((a, b) => a - b);
+/** the timeline point nearest mid-calendar (the one dim middle iso-time line) */
+export const T_MID = LAYER_T.reduce((b, t) => (Math.abs(t - 0.5) < Math.abs(b - 0.5) ? t : b), 0);
