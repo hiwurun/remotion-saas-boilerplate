@@ -1,5 +1,4 @@
 import React from "react";
-import { Easing } from "remotion";
 import { CameraState, worldToScreen } from "../../shared/components/Camera";
 import { EASE, EASE_OUT } from "../../shared/motion";
 import { MONO } from "../../shared/fonts";
@@ -16,12 +15,13 @@ import { C, THIN } from "../tokens";
 import { DTE0 } from "../model/model";
 import { easeIO, fadeWin, lerp, ramp } from "../timeline";
 import { B, HOOK, HOPS, mo } from "../beats";
+import { dteAt, signAt } from "../curve";
 import { TimeGap, TimeOverlay, thetaHotP } from "./TimeValue";
 
 /**
- * v7 app stage (GLOBAL frames, HOOK..B.lift): table walk on the 6550 row -> two brackets -> conclusion ->
- * 表格/曲线 morph -> slider sweep -> seller flip -> 1-day band push-in -> question ->
- * time-value coda (answer, rewind, 6550 gap, settle to the V) -> End.tsx takes the V from B.lift.
+ * v8 app stage (GLOBAL frames, HOOK..B.lift): table walk on the 6550 row -> two brackets -> conclusion ->
+ * 表格/曲线 morph -> one sweep (time-value bracket, ledger, then today → expiry) -> seller flip ->
+ * 1-day band -> question -> answer -> unflip back to the expiry V -> open question -> End.tsx.
  */
 
 const T = MODEL.timeline;
@@ -42,6 +42,10 @@ const SELL_1D_DROP = -MODEL.profit(P_DROP, 1); // +29,150
 const SELL_0 = -MODEL.profit(6550, 0); // +37,260
 const LAST_DAY = SELL_0 - SELL_1D; // 4,542
 const DROP = SELL_1D - SELL_1D_DROP; // 3,568
+/** one calendar day of time value at the open, and the yuan cost of a 1% drop now vs at expiry — all from the model */
+const TV_PER_DAY_NOW = Math.round(MODEL.value(6550, DTE0) - MODEL.value(6550, DTE0 - 1));
+const LOSS_NOW = Math.round(MODEL.profit(P_DROP, DTE0) - MODEL.profit(6550, DTE0));
+const LOSS_EXP = Math.round(MODEL.profit(P_DROP, 0) - MODEL.profit(6550, 0));
 
 const fmt = (v: number) => Math.abs(Math.round(v)).toLocaleString("en-US");
 /** signed with a true minus sign */
@@ -52,25 +56,8 @@ const fmtS = (v: number) => {
 const pnlColor = (v: number) => (v > 0.5 ? C.red : v < -0.5 ? C.green : C.mutedFg);
 
 /* ---------------------------------------------------------------- slider / curve state */
-/** dte at a fractional timeline index (piecewise linear between the table columns) */
-const idxToDte = (x: number) => {
-  const i = Math.max(0, Math.min(T.length - 1.000001, x));
-  const k = Math.floor(i);
-  return lerp(T[k].dte, T[Math.min(T.length - 1, k + 1)].dte, i - k);
-};
-const SWEEP_E = Easing.bezier(0.3, 0, 0.7, 1);
-export const dteAt = (f: number) => {
-  if (f < B.sweep[0]) return DTE0;
-  if (f < B.sweep[1]) return idxToDte((T.length - 1) * mo(f, B.sweep, SWEEP_E));
-  if (f < B.back1d[0]) return 0;
-  if (f < B.rewind[0]) return lerp(0, 1, mo(f, B.back1d)); // holds at 1 day through the question and the answer
-  if (f < B.settle[0]) return lerp(1, DTE0, mo(f, B.rewind));
-  return lerp(DTE0, 0, mo(f, B.settle, (t) => t)); // linear in days: theta itself speeds up near expiry
-};
-/** seller sign: 1 = buyer view, −1 = mirrored about zero */
-export const signAt = (f: number) => 1 - 2 * mo(f, B.flip) + 2 * mo(f, B.unflip);
 const domAt = (f: number) => {
-  const p = mo(f, [B.sweep[0], B.sweep[0] + 128]);
+  const p = mo(f, [B.sweep[0], B.sweep[0] + 180]);
   return [lerp(X_DOMAIN_START[0], X_DOMAIN_END[0], p), lerp(X_DOMAIN_START[1], X_DOMAIN_END[1], p)] as const;
 };
 const SC_END = makeScales(X_DOMAIN_END[0], X_DOMAIN_END[1]);
@@ -105,7 +92,11 @@ const FROM_PTS = Array.from({ length: 181 }, (_, i) => ({ x: lerp(ROW_X0, ROW_X1
 
 const hopProgress = (f: number) => {
   let h = 0;
-  for (let k = 1; k < HOPS.length; k++) h += ramp(f, HOPS[k] - Math.min(9, HOPS[k] - HOPS[k - 1]), HOPS[k], EASE);
+  for (let k = 1; k < HOPS.length; k++) {
+    const gap = HOPS[k] - HOPS[k - 1];
+    const w = Math.min(22, Math.max(8, Math.round(gap * 0.45)));
+    h += ramp(f, HOPS[k] - w, HOPS[k], EASE);
+  }
   return h;
 };
 /** walk decorations leave together with the table when 曲线 is clicked */
@@ -243,8 +234,8 @@ const ChartMarks: React.FC<{ f: number; cam: CameraState; x0: number; x1: number
         )}
         {dotOp > 0.001 && <circle cx={dx} cy={dy} r={r} fill={pnlColor(v)} stroke="#0b0c0e" strokeWidth={2 * k} opacity={dotOp} />}
       </svg>
-      {label(dx + 14 * k, dy - 34 * k, fmtS(v), pnlColor(v), "l", labOp * (1 - ramp(f, B.push[0], B.push[0] + 16)), "v")}
-      {label(dx + 14 * k, lerp(yExp, dy, 0.5), `+${fmt(LAST_DAY)}`, C.red, "l", gapOp, "gap", "最后一天")}
+      {label(dx + 14 * k, dy - 34 * k, fmtS(v), pnlColor(v), "l", labOp * (1 - gapOp) * (1 - ramp(f, B.push[0], B.push[0] + 16)), "v")}
+      {label(dx - 16 * k, lerp(yExp, dy, 0.5), `+${fmt(LAST_DAY)}`, C.red, "r", gapOp, "gap", "最后一天")}
       {/* push-in: the two seller values + the drop */}
       {label(dx + 14 * k, dy - 30 * k, fmtS(SELL_1D), C.red, "l", ramp(f, B.push[0] + 10, B.push[1]) * markOut, "s1", "6550 · 剩 1 天")}
       {label(ddx - 14 * k, ddy + 50 * k, fmtS(SELL_1D_DROP), C.red, "r", ramp(dropP, 0.6, 1) * markOut, "s2", "跌 1% → 6484.5")}
@@ -318,10 +309,10 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
             x0={x0}
             x1={x1}
             axesOp={ramp(f, B.morph[0] + 16, B.morph[1] + 4)}
-            legendOp={ramp(f, B.morph[1] - 2, B.morph[1] + 28) * (1 - ramp(f, B.sweep[1] - 22, B.sweep[1] + 8))}
+            legendOp={ramp(f, B.morph[1] - 2, B.morph[1] + 28) * (1 - ramp(f, B.sweep[1] - 30, B.sweep[1] + 10))}
             markerOp={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * clean}
             beOp={1 - ramp(f, B.flip[0], B.flip[0] + 20)}
-            midOp={1 - ramp(f, B.unflip[1] - 8, B.rewind[0] + 16, easeIO)}
+            midOp={1 - ramp(f, B.unflip[0], B.unflip[1], easeIO)}
             fillOp={ramp(f, B.morph[0] + 30, B.morph[1] + 22) * (1 - ramp(f, B.lift[0], B.lift[0] + 14, easeIO))}
             lineOp={f >= B.lift[0] ? 0 : 1 /* from the lift the End overlay V is the only V */}
             draw={1}
@@ -330,7 +321,7 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
           />
           <ChartMarks f={f} cam={cam} x0={x0} x1={x1} s={s} dte={dte} />
           <TimeGap f={f} dte={dte} />
-          <DateSlider model={MODEL} dte={dte} op={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * (1 - ramp(f, B.settle[1] - 16, B.lift[0] + 8, easeIO))} />
+          <DateSlider model={MODEL} dte={dte} op={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * (1 - ramp(f, B.ask[0] - 6, B.ask[0] + 18, easeIO))} />
         </>
       ) : null}
     </Panel>
@@ -347,11 +338,16 @@ const BIG = [
 export const StageOverlay: React.FC<{ f: number }> = ({ f }) => {
   const conc = mo(f, B.conc);
   const concOut = mo(f, B.concOut);
-  const concDim = 0.8 * conc * (1 - concOut);
+  const concDim = 0.88 * conc * (1 - concOut);
   const lineP = mo(f, B.concLine) * (1 - concOut);
   // dim stays through the answer card (it deepens a touch once the numbers are up), then clears for the gap
   const qDim = mo(f, B.pull) * (1 - mo(f, B.ansOut)) * lerp(0.62, 0.78, mo(f, B.ans));
   const qP = mo(f, B.q) * (1 - mo(f, B.qOut));
+  const askIn = mo(f, B.ask);
+  const askOut = mo(f, B.askOut);
+  const askP = askIn * (1 - askOut);
+  const askDim = ramp(f, B.ask[0] - 10, B.ask[0] + 28, easeIO) * (1 - askOut) * 0.8;
+  const echo = ramp(f, B.ask[1] + 72, B.ask[1] + 132, easeIO) * (1 - askOut);
   /* cursor to 曲线 (screen space, tracking the toggle while the camera pulls back) */
   const cam = stageCamera(f);
   const tgt = worldToScreen(TOGGLE_W, cam, W, H);
@@ -387,9 +383,34 @@ export const StageOverlay: React.FC<{ f: number }> = ({ f }) => {
       {qP > 0.001 &&
         ["每天多收的那几千块，", "够不够赔一次 1% 的波动？"].map((t, i) => (
           <div key={i} style={{ position: "absolute", left: 0, width: W, top: 400 + i * 112, height: 104, overflow: "hidden" }}>
-            <div style={{ textAlign: "center", fontFamily: THIN, fontWeight: 400, fontSize: 72, lineHeight: "104px", letterSpacing: "0.06em", color: "#fff", transform: `translateY(${(1 - ramp(qP, i * 0.12, 1)) * 96}px)`, opacity: Math.min(1, ramp(qP, i * 0.12, 1) * 1.6) }}>{t}</div>
+            <div style={{ textAlign: "center", fontFamily: THIN, fontWeight: 400, fontSize: 72, lineHeight: "104px", letterSpacing: "0.06em", color: "#fff", transform: `translateY(${(1 - ramp(mo(f, B.q), i * 0.12, 1)) * 96}px)`, opacity: Math.min(1, ramp(mo(f, B.q), i * 0.12, 1) * 1.6) * (1 - mo(f, B.qOut)) }}>{t}</div>
           </div>
         ))}
+      {askDim > 0.001 && <div style={{ position: "absolute", inset: 0, background: `rgba(0,0,0,${askDim})` }} />}
+      {askP > 0.001 &&
+        ["所以，如果想做卖方，应该在什么阶段介入，", "才能既最大程度地收取时间价值，又控制住 Gamma 风险？"].map((t, i) => (
+          <div key={t} style={{ position: "absolute", left: 0, width: W, top: 268 + i * 104, height: 96, overflow: "hidden" }}>
+            <div style={{ textAlign: "center", fontFamily: THIN, fontWeight: 400, fontSize: 52, lineHeight: "96px", letterSpacing: "0.03em", color: "#fff", whiteSpace: "nowrap", transform: `translateY(${(1 - ramp(askIn, i * 0.16, 1)) * 90}px)`, opacity: Math.min(1, ramp(askIn, i * 0.16, 1) * 1.6) * (1 - askOut) }}>{t}</div>
+          </div>
+        ))}
+      {echo > 0.001 && (
+        <div style={{ position: "absolute", left: 0, width: W, top: 520, textAlign: "center", opacity: echo, pointerEvents: "none" }}>
+          <div style={{ fontFamily: THIN, fontSize: 26, letterSpacing: "0.16em", color: "rgba(230,232,236,0.8)", marginBottom: 18 }}>临近到期，Theta 与 Gamma 一起变大</div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 72 }}>
+            {[
+              ["一天的时间价值", TV_PER_DAY_NOW, LAST_DAY],
+              ["跌 1% 要赔", LOSS_NOW, LOSS_EXP],
+            ].map(([label, a, b]) => (
+              <div key={String(label)} style={{ textAlign: "left" }}>
+                <div style={{ fontFamily: THIN, fontSize: 20, letterSpacing: "0.14em", color: C.mutedFg, marginBottom: 6 }}>{label}</div>
+                <div style={{ fontFamily: MONO, fontSize: 34, fontWeight: 600, color: C.theta, fontVariantNumeric: "tabular-nums" }}>
+                  {fmt(Number(a))} <span style={{ color: "rgba(230,232,236,0.45)", fontWeight: 400 }}>→</span> {fmt(Number(b))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {curOp > 0.001 && <Cursor x={curX} y={curY} opacity={curOp} press={press} />}
       <TimeOverlay f={f} />
     </>
@@ -398,12 +419,12 @@ export const StageOverlay: React.FC<{ f: number }> = ({ f }) => {
 
 export const StageCaptions: React.FC<{ f: number }> = ({ f }) => (
   <>
-    <Caption text="损耗在临近到期时会不断加速。" p={fadeWin(f, B.capTable[0], B.capTable[1], 18)} />
-    <Caption text="每过一天往下压一截，越往后压得越深。" p={fadeWin(f, B.capSweep[0], B.capSweep[1], 18)} />
-    <Caption text={`反过来看：这些钱进了卖方口袋。最后一天就有 ${fmt(LAST_DAY)} 元。`} p={fadeWin(f, B.capSeller[0], B.capSeller[1], 18)} />
-    <Caption text={`只剩 1 天：价格跌 1%（约 65 点），卖方就要赔 ${fmt(DROP)} 元。`} p={fadeWin(f, B.capBand[0], B.capBand[1], 18)} />
-    <Caption text="价格不动，少掉的这一截，叫时间价值。" p={fadeWin(f, B.formula[0] + 12, B.formulaOut[1] - 8, 18)} />
-    <Caption text="越近到期，掉得越快。到期那一刻，它是零。" p={fadeWin(f, B.settle[0] + 16, B.lift[0] + 14, 16)} />
+    <Caption text="损耗在临近到期时会不断加速。" p={fadeWin(f, B.capTable[0], B.capTable[1], 24)} />
+    <Caption text="价格不动，少掉的这一截，叫时间价值。" p={fadeWin(f, B.capName[0], B.capName[1], 24)} />
+    <Caption text="每过一天往下压一截，越往后压得越深。" p={fadeWin(f, B.capSweep[0], B.capSweep[1], 24)} />
+    <Caption text="越近到期，掉得越快。到期那一刻，它是零。" p={fadeWin(f, B.capDrain[0], B.capDrain[1], 24)} />
+    <Caption text={`反过来看：这些钱进了卖方口袋。最后一天就有 ${fmt(LAST_DAY)} 元。`} p={fadeWin(f, B.capSeller[0], B.capSeller[1], 24)} />
+    <Caption text={`只剩 1 天：价格跌 1%（约 65 点），卖方就要赔 ${fmt(DROP)} 元。`} p={fadeWin(f, B.capBand[0], B.capBand[1], 24)} />
   </>
 );
 

@@ -12,18 +12,19 @@ import { FPS, H, HOOK, TOTAL, W } from "./timeline";
 export { FPS, H, TOTAL, W };
 
 /**
- * v7 「一秒之后，不只是少了一秒」 — story-first cut (52 s):
- * Play -> 3D (price stays, the combo bleeds) -> the 6550 row, day by day -> two brackets -> conclusion ->
- * 曲线 sweep -> seller's view -> 1-day, −1 % band -> question ->
- * time value (4,542 covers the 1% move; the 6550 gap is named, then it drains to zero) -> V -> logo -> f3119 == f0.
- * All frames are global (see beats.ts / open/timeline.ts).
+ * v8 「一秒之后，不只是少了一秒」 — 128.4 s.
+ * Play -> 3D -> the 6550 row, day by day -> two brackets -> conclusion ->
+ * one curve drag (the 6550 gap is named, then it drains to zero) -> seller's view ->
+ * 1-day, −1% band -> 「够不够」 -> answer -> an open question about when a seller should step in ->
+ * V -> logo -> f7700 == f0.
+ * All frames are global (see beats.ts / open/timeline.ts). The bed is 20s and loops, fading on the last frames.
  */
 export const OpenVlabStrategyVideo: React.FC<{ debug?: string }> = ({ debug = "" }) => {
   const f = useCurrentFrame();
   const cam = stageCamera(f);
   return (
     <AbsoluteFill style={{ background: C.bg, overflow: "hidden" }}>
-      <Audio src={staticFile("audio/bgm.mp3")} volume={(fr) => interpolate(fr, [0, 0.8 * FPS, TOTAL - 2.2 * FPS, TOTAL - 1], [0, 0.8, 0.8, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} />
+      <Audio loop src={staticFile("audio/bgm.mp3")} volume={(fr) => interpolate(fr, [0, 0.8 * FPS, TOTAL - 2.2 * FPS, TOTAL - 1], [0, 0.8, 0.8, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} />
       <Sequence from={0} durationInFrames={HOOK} premountFor={FPS}>
         <Opening f={f} debug={debug} />
       </Sequence>

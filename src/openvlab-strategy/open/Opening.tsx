@@ -155,9 +155,9 @@ export const Opening: React.FC<{ f: number; debug?: string }> = ({ f, debug = ""
       {debug !== "dom" && debug !== "light" && <Labels3D f={f} />}
 
       {/* captions */}
-      <Caption text="价格停在 6550，一动没动。" p={ramp(f, O.cap1[0], O.cap1[0] + 26) * (1 - ramp(f, O.cap1[1] - 18, O.cap1[1]))} y={940} />
-      <Caption text="这个组合却从 −739 亏到 −37,260。" p={ramp(f, O.cap2[0], O.cap2[0] + 26) * (1 - ramp(f, O.cap2[1] - 14, O.cap2[1]))} y={940} />
-      <Caption text="钱是哪几天亏掉的？回到第一天。" p={ramp(f, O.cap3[0], O.cap3[0] + 26) * (1 - ramp(f, O.cap3[1] - 18, O.cap3[1]))} y={980} />
+      <Caption text="价格停在 6550，一动没动。" p={ramp(f, O.cap1[0], O.cap1[0] + 24) * (1 - ramp(f, O.cap1[1] - 24, O.cap1[1]))} y={940} />
+      <Caption text="这个组合却从 −739 亏到 −37,260。" p={ramp(f, O.cap2[0], O.cap2[0] + 24) * (1 - ramp(f, O.cap2[1] - 24, O.cap2[1]))} y={940} />
+      <Caption text="钱是哪几天亏掉的？回到第一天。" p={ramp(f, O.cap3[0], O.cap3[0] + 24) * (1 - ramp(f, O.cap3[1] - 24, O.cap3[1]))} y={980} />
 
     </AbsoluteFill>
   );

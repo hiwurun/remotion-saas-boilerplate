@@ -1,67 +1,76 @@
 import { Easing } from "remotion";
 
 /**
- * v7 beat table — story-first cut (global frames @60fps, TOTAL 3120 = 52 s, f3119 == f0).
- * The opening (title → Play → door → 3D → flatten into the table) is timed in open/timeline.ts (O) and ends at HOOK = 684.
- * Every morph / camera move glides 48 f (0.8 s) on MORPH = cubic-bezier(.45,0,.15,1); the iris and the final shrink are eased by AREA.
- * v7 inserts a time-value coda after the question (ans → unflip → rewind → gap → settle) before the same ending.
+ * v8 beat table — one curve drag, then room to read (global frames @60fps).
+ * TOTAL 7701 ≈ 128.4 s. Last frame 7700 finishes B.out, so the disc is gone and f7700 == f0.
+ *
+ * The opening (open/timeline.ts) ends at HOOK. Its dolly / flatten / handoff keep the same
+ * internal offsets as v7; only the holds around the captions moved.
+ *
+ * Reading rule: a caption is fully on screen for at least max(1s, 字数/4 秒) after it has
+ * finished appearing, then fades. 字 counts CJK and punctuation; a whole number counts as one.
+ * Glides are 72f (1.2s). The old rewind (dte 1 → today) and the second walk (today → expiry)
+ * are gone — that story now rides the single sweep below.
  */
-export const HOOK = 684;
+export const HOOK = 1163;
 
 /** frame at which the table walk's focus arrives on date column k (k = 0..17) */
 export const HOPS: number[] = [
-  724, // 10/29
-  744, 762, 780, 798, 816, // first week (10/30 .. 11/05)
-  876, 883, 890, 897, 904, 911, 918, 925, // middle (11/06 .. 11/17), a quicker glance
-  942, 958, 974, 990, // last three days (11/18, 11/19, 11/20 09:30, 到期)
+  1253, // 10/29
+  1301, 1349, 1397, 1445, 1493, // first week, 0.8s apart so each diff can be read
+  1739, 1775, 1811, 1847, 1883, 1919, 1955, 1991, // middle, a slower glance (0.6s)
+  2057, 2117, 2177, 2237, // last three days, 1.0s apart
 ];
 
 export const B = {
   /* ---- table (HOOK..) */
-  camIn: [684, 732], // 1:1 -> 1.2 on the 6550 row
-  dim: [690, 730], // other rows dim, diff strip appears
-  br1: [822, 870], // bracket 10/29 -> 11/05 「第一周：少了 7,617 元」
-  br2: [994, 1042], // bracket 11/17 -> 到期 「最后三天：少了 11,027 元」
-  capTable: [930, 1070], // 「损耗在临近到期时会不断加速。」
-  conc: [1050, 1098], // the two numbers glide out of the brackets to the centre; table dims
-  concLine: [1080, 1116], // 「最后 3 天，比第一周亏得还多。」 rises
-  concOut: [1166, 1190],
-  camOut: [1166, 1214], // back to 1:1
+  camIn: [1163, 1235], // 1:1 -> 1.2 on the 6550 row
+  dim: [1175, 1227], // other rows dim, diff strip appears
+  br1: [1517, 1589], // bracket 10/29 -> 11/05 「第一周：少了 7,617 元」
+  br2: [2261, 2333], // bracket 11/17 -> 到期 「最后三天：少了 11,027 元」
+  capTable: [2049, 2322], // 「损耗在临近到期时会不断加速。」
+  conc: [2361, 2433], // the two numbers glide out of the brackets to the centre
+  concLine: [2449, 2497], // 「最后 3 天，比第一周亏得还多。」 rises; holds until concOut
+  concOut: [2707, 2755],
+  camOut: [2707, 2779], // back to 1:1
   /* ---- 表格 -> 曲线 */
-  curIn: [1160, 1206],
-  click: 1208,
-  morph: [1210, 1258], // the 6550 row bends into today's curve (no stagger)
-  sweep: [1272, 1512], // date slider 10/29 -> 到期: the curve is pressed into the V
-  capSweep: [1280, 1516], // 「每过一天往下压一截，越往后压得越深。」
-  /* ---- seller */
-  flip: [1530, 1578], // mirror about the zero axis
-  capSeller: [1540, 1676], // 「反过来看：这些钱进了卖方口袋。最后一天就有 4,542 元。」
-  back1d: [1590, 1638], // slider 到期 -> 还有 1 天
-  gap: [1634, 1660], // +4,542 marker between the 1-day curve and the expiry line
-  push: [1682, 1730], // band 6485–6615 + camera push-in on the same curve
-  drop: [1708, 1736], // 6550 -> 6485 drop marker 「−3,568」
-  capBand: [1690, 1822], // 「只剩 1 天：价格跌 1%（约 65 点），卖方就要赔 3,568 元。」
+  curIn: [2803, 2875],
+  click: 2893,
+  morph: [2907, 2979], // the 6550 row bends into today's curve
+  /* ---- the only full curve drag: name the gap, then press today → expiry once */
+  tv: [3015, 3087], // bracket grows on the still curve: the 6550 distance is time value
+  formula: [3103, 3175], // ledger: 现在值 = 内在价值 + 时间价值
+  capName: [3113, 3431], // 「价格不动，少掉的这一截，叫时间价值。」
+  formulaOut: [3413, 3461],
+  sweep: [3485, 4254], // slider 10/29 -> 到期, linear in days; the gap counts down to 0
+  capSweep: [3501, 3834], // 「每过一天往下压一截，越往后压得越深。」
+  capDrain: [3864, 4212], // 「越近到期，掉得越快。到期那一刻，它是零。」
+  /* ---- seller: a one-day nudge, not a second pass through the month */
+  flip: [4290, 4362], // mirror about the zero axis
+  capSeller: [4302, 4710], // 「反过来看：这些钱进了卖方口袋。最后一天就有 4,542 元。」
+  back1d: [4390, 4462], // slider 到期 -> 还有 1 天
+  gap: [4454, 4490], // +4,542 marker; it then holds until the push
+  push: [4734, 4806], // band 6485–6615 + camera push-in
+  drop: [4790, 4838], // 6550 -> 6485 drop marker 「−3,568」
+  capBand: [4742, 5135], // 「只剩 1 天：价格跌 1%（约 65 点），卖方就要赔 3,568 元。」
   /* ---- question */
-  pull: [1822, 1870], // camera back to 1:1, chart dims
-  q: [1840, 1876], // 「每天多收的那几千块，够不够赔一次 1% 的波动？」
-  qOut: [2000, 2024],
-  /* ---- time value: answer the question, then name the gap between today's curve and the expiry V */
-  ans: [2032, 2080], // 4,542 and 3,568 glide out to the centre
-  ansLine: [2088, 2136], // 「最后一天收的，够赔一次 1% 的波动。」
-  ansOut: [2304, 2352],
-  unflip: [2340, 2388], // seller → buyer, still on the 1-day curve
-  rewind: [2400, 2448], // dte 1 → today: the curve lifts off the V, the gap opens
-  tv: [2400, 2448], // bracket grows with the rewind: the whole 6550 distance is time value
-  formula: [2472, 2520], // ledger: 现在值 = 内在价值 + 时间价值
-  formulaOut: [2700, 2736],
-  settle: [2724, 2940], // dte today → 0, linear in days so the decay itself accelerates; bracket counts down to 0
-  /* ---- ending (same internal offsets as v6, shifted to follow the coda) */
-  lift: [2940, 2988], // the V lifts off the chart to the logo position; chart fades
-  logo: [2976, 3016], // straight V -> logo centerline, disc grows, glyph swaps in
-  iris: [2980, 3028], // light world closes (by area) onto the disc
-  theme: [3008, 3044], // 「一秒之后，不只是少了一秒。」
-  out: [3083, 3119], // theme sinks, disc shrinks (by area) to 0 -> f3119 == f0
-  end: 3120,
+  pull: [5159, 5231], // camera back to 1:1, chart dims
+  q: [5195, 5267], // 「每天多收的那几千块，够不够赔一次 1% 的波动？」 rises; holds until qOut
+  qOut: [5597, 5639],
+  /* ---- answer, then back to the buyer expiry V in the same gesture as the unflip */
+  ans: [5667, 5739], // 4,542 and 3,568 glide out to the centre
+  ansLine: [5755, 5803], // 「最后一天收的，够赔一次 1% 的波动。」
+  ansOut: [6043, 6091],
+  unflip: [6115, 6187], // seller → buyer, and dte 1 → 0, so the curve is the expiry V again
+  /* ---- open question, unanswered, then the same ending */
+  ask: [6223, 6307], // the seller-entry question rises; holds until askOut
+  askOut: [7087, 7135],
+  lift: [7159, 7231], // the V lifts off the chart; chart fades
+  logo: [7249, 7305], // straight V -> logo centerline
+  iris: [7255, 7327], // light world closes (by area) onto the disc
+  theme: [7343, 7403], // 「一秒之后，不只是少了一秒。」 rises; holds until out
+  out: [7628, 7700], // theme sinks, disc shrinks (by area) to 0 -> f7700 == f0
+  end: 7701,
 } as const;
 
 export const MORPH = Easing.bezier(0.45, 0, 0.15, 1);

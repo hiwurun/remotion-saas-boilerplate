@@ -3,40 +3,46 @@ import { H, W } from "../timeline";
 import { DEPTH, TABLE_BODY, TABLE_CENTER, X_HALF, ZC } from "./surface";
 import { SceneState } from "./scene";
 
-/** Frame map of the new opening (global frames @60fps). */
+/**
+ * Frame map of the opening (global frames @60fps).
+ * v8: captions hold at ~4 字/秒, and the click waits a beat. The block from `orbit`
+ * through `chrome` is the v7 block shifted together, so dolly still lands on planeCam
+ * and the f636-era alignment still applies at the same offset past handoff.
+ * HOOK in beats.ts equals `out[1]`.
+ */
 export const O = {
   label: [4, 40],
   title: [8, 64],
   btnIn: [40, 96],
   cursorIn: [96, 170],
   hover: [156, 180],
-  press: 184, // mouse down (click sfx here)
-  release: 192, // mouse up (lighter release tick ~110ms later)
-  ring: [188, 226], // luminous ripple at the click position
-  seam: [190, 214], // v6: the tear starts inside the pill and runs up/down to the frame edges
-  split: [198, 264], // the door: 66 frames = 1.1 s
-  reveal: [150, 250],
-  box: [196, 300], // the chart box (grids + axis edges) settles in behind the door
-  axes: [276, 306], // tick numbers + axis titles (标的价格 / 剩余天数 / 盈亏)
-  labelsOut: [438, 460], // v10: tick labels + callouts fade out gracefully as the orbit starts
-  callA: [306, 332], // v10: start callout 「剩 23 天 · −739」
-  callB: [362, 388], // v10: end callout 「到期 · −37,260」
-  orbit: [444, 528], // v11: ONE eased yaw of ~170° to the opposite (expiry) side, then the yaw is frozen for good (no roll, no flip)
-  axesOut: [526, 546], // box grids fade as the camera starts to tilt up
-  impact: 540, // v9: no fall any more; kept only as the anchor of the background fades in Opening.tsx (unchanged timing)
-  cap1: [270, 400], // 「价格停在 6550，一动没动。」
-  cap2: [410, 552], // 「这个组合却从 −739 亏到 −37,260。」
-  rise: [522, 590], // v11: pure pitch from the opposite-side view up to straight overhead (yaw frozen)
-  dolly: [522, 601], // v11: target / distance / fov / offset glide straight onto the table camera (lands exactly at 601)
-  flat: [530, 580], // the sheet flattens in place while the camera tilts up
-  fit: [540, 598], // v11: price-axis stretch + full price range, blended gradually across the flatten (square sheet -> table aspect)
-  linesOut: [548, 578], // v11: hero lines (U, V, spine, day lines) fade before the table colours arrive
-  heat: [568, 598], // cyan glow -> the table's own cell colours
-  handoff: [602, 616],
-  pull: [554, 673],
-  chrome: [608, 642],
-  cap3: [556, 678], // 「钱是哪几天亏掉的？回到第一天。」
-  out: [665, 684],
+  press: 220, // mouse down (click sfx here); the cursor rests on the pill first
+  release: 228, // mouse up (lighter release tick ~110ms later)
+  ring: [224, 262], // luminous ripple at the click position
+  seam: [226, 250], // the tear starts inside the pill and runs up/down to the frame edges
+  split: [234, 300], // the door: 66 frames = 1.1 s
+  reveal: [186, 286],
+  box: [232, 336], // the chart box (grids + axis edges) settles in behind the door
+  axes: [312, 342], // tick numbers + axis titles (标的价格 / 剩余天数 / 盈亏)
+  labelsOut: [595, 617], // tick labels + callouts fade out as the orbit starts
+  callA: [342, 368], // start callout 「剩 23 天 · −739」
+  callB: [398, 424], // end callout 「到期 · −37,260」
+  cap1: [312, 525], // 「价格停在 6550，一动没动。」 fully up 2.75s
+  cap2: [561, 774], // 「这个组合却从 −739 亏到 −37,260。」
+  orbit: [601, 685], // ONE eased yaw of ~170° to the opposite (expiry) side, then the yaw is frozen
+  axesOut: [683, 703], // box grids fade as the camera starts to tilt up
+  impact: 697, // anchor of the background fade in Opening.tsx
+  rise: [679, 747], // pure pitch from the opposite-side view up to straight overhead (yaw frozen)
+  dolly: [679, 758], // lands exactly on the table camera at 758
+  flat: [687, 737], // the sheet flattens in place while the camera tilts up
+  fit: [697, 755], // price-axis stretch + full price range across the flatten
+  linesOut: [705, 735], // hero lines fade before the table colours arrive
+  heat: [725, 755], // cyan glow -> the table's own cell colours
+  handoff: [759, 773],
+  pull: [711, 830],
+  chrome: [765, 799],
+  cap3: [848, 1121], // 「钱是哪几天亏掉的？回到第一天。」 the table is already still
+  out: [1121, 1163], // == HOOK
 } as const;
 
 /** measured sub-pixel calibration of the 3D plane vs the DOM table (stills diff at f636) */
