@@ -126,10 +126,11 @@ const EN = {
   "lib.usedIn": "Used ×{n}",
   "lib.unused": "Unused",
   "lib.bgm": "BGM options (assets/audio/bgm)",
-  "lib.sfxLib": "SFX library · {cat}",
+  "lib.freesound": "Find sounds on Freesound ↗",
+  "lib.freesoundHint": "Ask the agent to download selected sounds into this film. They appear under Project audio after reopening the workbench.",
   "lib.foot.themes": "Theme switches are undoable · saved with the project",
   "lib.foot.cards": "{n} motion cards ({m} tunable)",
-  "lib.foot.sfx": " · SFX library {n}",
+  "lib.foot.sfx": " · project audio {n}",
   "lib.foot.units": " · film units {n}",
   "lib.foot.hint": "Click to preview · drag onto the timeline",
 
@@ -287,10 +288,11 @@ const ZH: Record<StringKey, string> = {
   "lib.usedIn": "片中×{n}",
   "lib.unused": "未用",
   "lib.bgm": "BGM 备选（assets/audio/bgm）",
-  "lib.sfxLib": "音效库 · {cat}",
+  "lib.freesound": "到 Freesound 找音效 ↗",
+  "lib.freesoundHint": "让 Agent 把选中的声音下载到本片。重新打开工作台后，即可在本片音频中试听和添加。",
   "lib.foot.themes": "切换主题可撤销 · 随工程自动保存",
   "lib.foot.cards": "动效 {n} 卡（{m} 张可调参）",
-  "lib.foot.sfx": " · 音效库 {n}",
+  "lib.foot.sfx": " · 本片音频 {n}",
   "lib.foot.units": " · 成片单元 {n}",
   "lib.foot.hint": "点击预览 · 拖拽到时间轨添加",
 
@@ -448,10 +450,11 @@ const RU: Record<StringKey, string> = {
   "lib.usedIn": "В видео ×{n}",
   "lib.unused": "Не используется",
   "lib.bgm": "Варианты BGM (assets/audio/bgm)",
-  "lib.sfxLib": "Библиотека SFX · {cat}",
+  "lib.freesound": "Найти звуки на Freesound ↗",
+  "lib.freesoundHint": "Попросите агента загрузить выбранные звуки в проект. После повторного открытия они появятся в аудио проекта.",
   "lib.foot.themes": "Смену темы можно отменить · сохраняется вместе с проектом",
   "lib.foot.cards": "Анимаций: {n} (настраиваемых: {m})",
-  "lib.foot.sfx": " · библиотека SFX: {n}",
+  "lib.foot.sfx": " · аудио проекта: {n}",
   "lib.foot.units": " · элементов видео: {n}",
   "lib.foot.hint": "Нажмите для предпросмотра · перетащите на таймлайн",
 
@@ -570,6 +573,9 @@ const LABELS_ZH_EN: Record<string, string> = {
   "字卡": "Title card",
   "解说字幕条": "Caption strip",
   "暖白闪转场": "Warm flash cut",
+  "衬线大字逐词压印入场，*词* 标琥珀斜体强调，下划线生长；尾 8 帧淡出": "Large serif title presses in word by word, *word* gets amber italic emphasis, underline grows; fades out over the last 8 frames",
+  "底部通栏等宽解说条，琥珀方点引导；透明底，叠在任何镜头上": "Full-width monospace caption bar at the bottom with an amber square bullet; transparent background, layers over any shot",
+  "放在硬切点前 5 帧、跨骑两侧各 5 帧；只盖接缝，不当装饰光效": "Place 5 frames before a hard cut, straddling 5 frames on each side; it only hides the seam, not a decorative light effect",
   // schema 字段 / 选项
   "底色": "Fill color",
   "亮斑强度": "Glow strength",
@@ -689,6 +695,9 @@ const LABELS_ZH_RU: Record<string, string> = {
   "字卡": "Титр",
   "解说字幕条": "Полоса субтитров",
   "暖白闪转场": "Тёплая вспышка-переход",
+  "衬线大字逐词压印入场，*词* 标琥珀斜体强调，下划线生长；尾 8 帧淡出": "Крупный антиквенный титр впечатывается по словам, *слово* выделяется янтарным курсивом, растёт подчёркивание; последние 8 кадров — затухание",
+  "底部通栏等宽解说条，琥珀方点引导；透明底，叠在任何镜头上": "Полоса пояснений моноширинным шрифтом во всю ширину внизу, с янтарным квадратным маркером; прозрачный фон, ложится поверх любого плана",
+  "放在硬切点前 5 帧、跨骑两侧各 5 帧；只盖接缝，不当装饰光效": "Ставится за 5 кадров до жёсткой склейки и захватывает по 5 кадров с каждой стороны; только прячет шов, а не служит декоративным световым эффектом",
   "底色": "Цвет заливки",
   "亮斑强度": "Сила свечения",
   "文字内容": "Текст",
@@ -826,7 +835,7 @@ export const cardName = (card: Pick<CardDef, "name" | "nameEn">): string => {
 export const cardSummary = (card: Pick<CardDef, "summary" | "summaryEn">): string | undefined => {
   const l = useLocale.getState().locale;
   if (l === "en") return card.summaryEn ?? (card.summary ? tx(card.summary) : undefined);
-  if (l === "ru") return card.summary ? (DEMO_TEXT_RU[card.summary] ?? card.summaryEn ?? card.summary) : undefined;
+  if (l === "ru") return card.summary ? (DEMO_TEXT_RU[card.summary] ?? card.summaryEn ?? tx(card.summary)) : undefined;
   return card.summary;
 };
 
