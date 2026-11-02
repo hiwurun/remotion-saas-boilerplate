@@ -63,8 +63,8 @@ export const MetricsBar: React.FC<{ model: Model; reveal: (i: number) => number;
               opacity: p,
               transform: `translateY(${(1 - p) * 10}px)`,
               borderRadius: 8,
-              background: hl > 0 ? `rgba(59,130,246,${0.12 * hl})` : "transparent",
-              boxShadow: hl > 0 ? `0 0 0 1px rgba(56,97,251,${0.9 * hl}), 0 0 ${24 * hl}px rgba(56,97,251,${0.5 * hl})` : undefined,
+              background: hl > 0 ? `rgba(56,97,251,${0.34 * hl})` : "transparent",
+              boxShadow: hl > 0 ? `inset 0 0 0 1.5px rgba(120,160,255,${hl})` : undefined,
               fontVariantNumeric: "tabular-nums",
             }}
           >

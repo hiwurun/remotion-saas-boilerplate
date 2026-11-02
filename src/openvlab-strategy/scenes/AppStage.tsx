@@ -16,10 +16,12 @@ import { C, THIN } from "../tokens";
 import { DTE0 } from "../model/model";
 import { easeIO, fadeWin, lerp, ramp } from "../timeline";
 import { B, HOOK, HOPS, mo } from "../beats";
+import { TimeGap, TimeOverlay, thetaHotP } from "./TimeValue";
 
 /**
- * v6 app stage (GLOBAL frames, HOOK..B.lift): table walk on the 6550 row -> two brackets -> conclusion ->
- * 表格/曲线 morph -> slider sweep -> seller flip -> 1-day band push-in -> question -> unflip (End.tsx takes the V from B.lift).
+ * v7 app stage (GLOBAL frames, HOOK..B.lift): table walk on the 6550 row -> two brackets -> conclusion ->
+ * 表格/曲线 morph -> slider sweep -> seller flip -> 1-day band push-in -> question ->
+ * time-value coda (answer, rewind, 6550 gap, settle to the V) -> End.tsx takes the V from B.lift.
  */
 
 const T = MODEL.timeline;
@@ -61,8 +63,9 @@ export const dteAt = (f: number) => {
   if (f < B.sweep[0]) return DTE0;
   if (f < B.sweep[1]) return idxToDte((T.length - 1) * mo(f, B.sweep, SWEEP_E));
   if (f < B.back1d[0]) return 0;
-  if (f < B.unflip[0]) return lerp(0, 1, mo(f, B.back1d));
-  return lerp(1, 0, mo(f, B.unflip));
+  if (f < B.rewind[0]) return lerp(0, 1, mo(f, B.back1d)); // holds at 1 day through the question and the answer
+  if (f < B.settle[0]) return lerp(1, DTE0, mo(f, B.rewind));
+  return lerp(DTE0, 0, mo(f, B.settle, (t) => t)); // linear in days: theta itself speeds up near expiry
 };
 /** seller sign: 1 = buyer view, −1 = mirrored about zero */
 export const signAt = (f: number) => 1 - 2 * mo(f, B.flip) + 2 * mo(f, B.unflip);
@@ -304,7 +307,7 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
 
   return (
     <Panel op={panelOp} titleOp={1} view={view} togglePress={press} toggleOp={1}>
-      <MetricsBar model={MODEL} reveal={() => 1} count={1} beSep=" · " staticKeys={["be"]} />
+      <MetricsBar model={MODEL} reveal={() => 1} count={1} beSep=" · " staticKeys={["be"]} hot={{ key: "theta", p: thetaHotP(f) }} />
       {tableOn ? <ProfitTable model={MODEL} fx={cellFx} headerOp={headerOp} lineP={lineP} /> : null}
       {f < B.click + 24 ? <WalkOverlay f={f} /> : null}
       {chartOn ? (
@@ -318,6 +321,7 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
             legendOp={ramp(f, B.morph[1] - 2, B.morph[1] + 28) * (1 - ramp(f, B.sweep[1] - 22, B.sweep[1] + 8))}
             markerOp={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * clean}
             beOp={1 - ramp(f, B.flip[0], B.flip[0] + 20)}
+            midOp={1 - ramp(f, B.unflip[1] - 8, B.rewind[0] + 16, easeIO)}
             fillOp={ramp(f, B.morph[0] + 30, B.morph[1] + 22) * (1 - ramp(f, B.lift[0], B.lift[0] + 14, easeIO))}
             lineOp={f >= B.lift[0] ? 0 : 1 /* from the lift the End overlay V is the only V */}
             draw={1}
@@ -325,7 +329,8 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
             secondaryOp={ramp(f, B.morph[1] - 2, B.morph[1] + 28)}
           />
           <ChartMarks f={f} cam={cam} x0={x0} x1={x1} s={s} dte={dte} />
-          <DateSlider model={MODEL} dte={dte} op={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * (1 - ramp(f, B.unflip[1] - 10, B.lift[0] + 10, easeIO))} />
+          <TimeGap f={f} dte={dte} />
+          <DateSlider model={MODEL} dte={dte} op={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * (1 - ramp(f, B.settle[1] - 16, B.lift[0] + 8, easeIO))} />
         </>
       ) : null}
     </Panel>
@@ -344,7 +349,8 @@ export const StageOverlay: React.FC<{ f: number }> = ({ f }) => {
   const concOut = mo(f, B.concOut);
   const concDim = 0.8 * conc * (1 - concOut);
   const lineP = mo(f, B.concLine) * (1 - concOut);
-  const qDim = 0.62 * mo(f, B.pull) * (1 - mo(f, B.undim));
+  // dim stays through the answer card (it deepens a touch once the numbers are up), then clears for the gap
+  const qDim = mo(f, B.pull) * (1 - mo(f, B.ansOut)) * lerp(0.62, 0.78, mo(f, B.ans));
   const qP = mo(f, B.q) * (1 - mo(f, B.qOut));
   /* cursor to 曲线 (screen space, tracking the toggle while the camera pulls back) */
   const cam = stageCamera(f);
@@ -385,6 +391,7 @@ export const StageOverlay: React.FC<{ f: number }> = ({ f }) => {
           </div>
         ))}
       {curOp > 0.001 && <Cursor x={curX} y={curY} opacity={curOp} press={press} />}
+      <TimeOverlay f={f} />
     </>
   );
 };
@@ -395,6 +402,8 @@ export const StageCaptions: React.FC<{ f: number }> = ({ f }) => (
     <Caption text="每过一天往下压一截，越往后压得越深。" p={fadeWin(f, B.capSweep[0], B.capSweep[1], 18)} />
     <Caption text={`反过来看：这些钱进了卖方口袋。最后一天就有 ${fmt(LAST_DAY)} 元。`} p={fadeWin(f, B.capSeller[0], B.capSeller[1], 18)} />
     <Caption text={`只剩 1 天：价格跌 1%（约 65 点），卖方就要赔 ${fmt(DROP)} 元。`} p={fadeWin(f, B.capBand[0], B.capBand[1], 18)} />
+    <Caption text="价格不动，少掉的这一截，叫时间价值。" p={fadeWin(f, B.formula[0] + 12, B.formulaOut[1] - 8, 18)} />
+    <Caption text="越近到期，掉得越快。到期那一刻，它是零。" p={fadeWin(f, B.settle[0] + 16, B.lift[0] + 14, 16)} />
   </>
 );
 
