@@ -21,5 +21,3 @@ export const CHART = { w: CONTENT.w, h: 440, top: 34, bottom: 26, right: 24, lef
 export const PLOT = { x: CHART.left, y: CHART.top, w: CHART.w - CHART.left - CHART.right, h: CHART.h - CHART.top - CHART.bottom };
 export const SLIDER = { y: 448, h: 56 };
 
-/** Toggle button centres (native, panel coordinates). */
-export const TOGGLE = { y: 30, tableX: 904, chartX: 954, w: 46, h: 24 };

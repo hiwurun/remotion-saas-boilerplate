@@ -134,7 +134,7 @@ export const Opening: React.FC<{ f: number; debug?: string }> = ({ f, debug = ""
       {domOp > 0.001 && (
         <div style={{ position: "absolute", inset: 0, opacity: domOp, }}>
           <Camera state={camS} width={W} height={H}>
-            <Panel op={1} titleOp={ramp(f, O.chrome[0] + 30, O.chrome[0] + 70)} toggleOp={ramp(f, O.chrome[0] + 14, O.chrome[0] + 44)}>
+            <Panel op={1} titleOp={ramp(f, O.chrome[0] + 30, O.chrome[0] + 70)}>
               <MetricsBar model={MODEL} reveal={(i) => ramp(f, O.chrome[0] + 6 + i * 2, O.chrome[0] + 28 + i * 2, easeOutCubic)} count={ramp(f, O.chrome[0] + 8, O.chrome[0] + 56)} beSep=" · " staticKeys={["be"]} />
               <ProfitTable
                 model={MODEL}

@@ -46,6 +46,14 @@ export const LogoDisc: React.FC<{ cx: number; cy: number; size: number; opacity?
   />
 );
 
+/** Full brand mark (disc + brush V) — use only after the stroke→glyph morph has finished. */
+export const LogoMark: React.FC<{ cx: number; cy: number; size: number; opacity?: number; scale?: number }> = ({ cx, cy, size, opacity = 1, scale = 1 }) => (
+  <Img
+    src={staticFile("openvlab-strategy/logo.svg")}
+    style={{ position: "absolute", left: cx - size / 2, top: cy - size / 2, width: size, height: size, opacity, transform: `scale(${scale})`, transformOrigin: "50% 50%" }}
+  />
+);
+
 /** Full-frame svg overlay. Draws the filled glyph exactly where the logo's V sits. */
 export const LogoGlyph: React.FC<{ cx: number; cy: number; size: number; opacity?: number; scale?: number }> = ({ cx, cy, size, opacity = 1, scale = 1 }) => {
   const k = size / 512;

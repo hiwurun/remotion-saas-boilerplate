@@ -15,11 +15,12 @@ import { X_DOMAIN_END, contentToWorld, makeScales } from "../components/Strategy
  * Before the slider moves, a bracket at 6550 (today's curve vs the expiry payoff) and a ledger
  * name that distance: 现在值 = 内在价值 + 时间价值. The sweep then presses the curve to the V
  * and a sky number counts the same gap down to zero. There is no second walk.
- * The answer card (4,542 vs 3,568) still comes later, once the chart is in the seller's view.
+ * The answer card (last-day TV vs a 2% shock) still comes later in the seller view.
+ * Model: at 1 DTE, last-day collect 4,542 < drop-2% loss 8,960 -> 不够赔.
  */
 
 const S = 6550;
-const P_DROP = S * 0.99;
+const P_DROP = S * 0.98; // 6419 (-2 %)
 const INTRINSIC = Math.abs(S - CHAIN.strike) * CHAIN.multiplier; // 50 pt × 100
 const W = 1920;
 
@@ -28,10 +29,10 @@ const fmt = (v: number) => Math.abs(Math.round(v)).toLocaleString("en-US");
 const SELL_1D = -MODEL.profit(S, 1);
 const SELL_0 = -MODEL.profit(S, 0);
 const SELL_DROP = -MODEL.profit(P_DROP, 1);
-/** seller collects this from 1 day left to expiry — the bracket the question was asking about */
+/** seller collects this from 1 day left to expiry */
 export const LAST_DAY = SELL_0 - SELL_1D;
-/** what that same seller pays if the underlying drops 1% with 1 day left */
-export const DROP_1PCT = SELL_1D - SELL_DROP;
+/** what that same seller pays if the underlying drops 2% with 1 day left */
+export const DROP_2PCT = SELL_1D - SELL_DROP;
 
 const tvNow = MODEL.value(S, DTE0) - INTRINSIC;
 export const TV_NOW = Math.round(tvNow);
@@ -58,8 +59,8 @@ export const TimeOverlay: React.FC<{ f: number }> = ({ f }) => {
   const op = ramp(p, 0, 0.22) * (1 - out);
   const card = op > 0.001 || lineP > 0.001;
   const pair = [
-    { from: FROM_LAST, x: 660, label: "最后一天", v: LAST_DAY, color: C.red },
-    { from: FROM_DROP, x: 1260, label: "一次 1%", v: DROP_1PCT, color: C.green },
+    { from: FROM_LAST, x: 660, label: "最后一天收", v: LAST_DAY, color: C.red },
+    { from: FROM_DROP, x: 1260, label: "跌 2% 要赔", v: DROP_2PCT, color: C.green },
   ] as const;
   return (
     <>
@@ -77,7 +78,7 @@ export const TimeOverlay: React.FC<{ f: number }> = ({ f }) => {
       {lineP > 0.001 && (
         <div style={{ position: "absolute", left: 0, width: W, top: 600, height: 86, overflow: "hidden" }}>
           <div style={{ textAlign: "center", fontFamily: THIN, fontWeight: 400, fontSize: 52, lineHeight: "86px", letterSpacing: "0.06em", color: C.fg, transform: `translateY(${(1 - lineIn) * 80}px)`, opacity: Math.min(1, lineIn * 1.6) * (1 - out) }}>
-            最后一天收的，够赔一次 1% 的波动。
+            一天收的，盖不住一次 2% 的波动。
           </div>
         </div>
       )}

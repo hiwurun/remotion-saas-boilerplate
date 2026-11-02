@@ -5,7 +5,7 @@ import { SceneState } from "./scene";
 
 /**
  * Frame map of the opening (global frames @60fps).
- * v8: captions hold at ~4 字/秒, and the click waits a beat. The block from `orbit`
+ * v8.1: captions hold at ~6 字/秒 (tighter than v8's ~4). The block from `orbit`
  * through `chrome` is the v7 block shifted together, so dolly still lands on planeCam
  * and the f636-era alignment still applies at the same offset past handoff.
  * HOOK in beats.ts equals `out[1]`.
@@ -16,33 +16,33 @@ export const O = {
   btnIn: [40, 96],
   cursorIn: [96, 170],
   hover: [156, 180],
-  press: 220, // mouse down (click sfx here); the cursor rests on the pill first
-  release: 228, // mouse up (lighter release tick ~110ms later)
-  ring: [224, 262], // luminous ripple at the click position
-  seam: [226, 250], // the tear starts inside the pill and runs up/down to the frame edges
-  split: [234, 300], // the door: 66 frames = 1.1 s
-  reveal: [186, 286],
-  box: [232, 336], // the chart box (grids + axis edges) settles in behind the door
-  axes: [312, 342], // tick numbers + axis titles (标的价格 / 剩余天数 / 盈亏)
-  labelsOut: [595, 617], // tick labels + callouts fade out as the orbit starts
-  callA: [342, 368], // start callout 「剩 23 天 · −739」
-  callB: [398, 424], // end callout 「到期 · −37,260」
-  cap1: [312, 525], // 「价格停在 6550，一动没动。」 fully up 2.75s
-  cap2: [561, 774], // 「这个组合却从 −739 亏到 −37,260。」
-  orbit: [601, 685], // ONE eased yaw of ~170° to the opposite (expiry) side, then the yaw is frozen
-  axesOut: [683, 703], // box grids fade as the camera starts to tilt up
-  impact: 697, // anchor of the background fade in Opening.tsx
-  rise: [679, 747], // pure pitch from the opposite-side view up to straight overhead (yaw frozen)
-  dolly: [679, 758], // lands exactly on the table camera at 758
-  flat: [687, 737], // the sheet flattens in place while the camera tilts up
-  fit: [697, 755], // price-axis stretch + full price range across the flatten
-  linesOut: [705, 735], // hero lines fade before the table colours arrive
-  heat: [725, 755], // cyan glow -> the table's own cell colours
-  handoff: [759, 773],
-  pull: [711, 830],
-  chrome: [765, 799],
-  cap3: [848, 1121], // 「钱是哪几天亏掉的？回到第一天。」 the table is already still
-  out: [1121, 1163], // == HOOK
+  press: 196, // mouse down (click sfx here); the cursor rests on the pill first
+  release: 204, // mouse up (lighter release tick ~110ms later)
+  ring: [200, 238], // luminous ripple at the click position
+  seam: [202, 226], // the tear starts inside the pill and runs up/down to the frame edges
+  split: [210, 276], // the door: 66 frames = 1.1 s
+  reveal: [162, 262],
+  box: [208, 312], // the chart box (grids + axis edges) settles in behind the door
+  axes: [288, 318], // tick numbers + axis titles (标的价格 / 剩余天数 / 盈亏)
+  labelsOut: [588, 610], // tick labels + callouts fade out as the orbit starts
+  callA: [318, 344], // start callout 「剩 23 天 · −739」
+  callB: [374, 400], // end callout 「到期 · −37,260」
+  cap1: [288, 460], // 「价格停在 6550，一动没动。」
+  cap2: [474, 694], // 「这个组合却从 −739 亏到 −37,260。」
+  orbit: [594, 678], // ONE eased yaw of ~170° to the opposite (expiry) side, then the yaw is frozen
+  axesOut: [676, 696], // box grids fade as the camera starts to tilt up
+  impact: 690, // anchor of the background fade in Opening.tsx
+  rise: [672, 740], // pure pitch from the opposite-side view up to straight overhead (yaw frozen)
+  dolly: [672, 751], // lands exactly on the table camera at 751
+  flat: [680, 730], // the sheet flattens in place while the camera tilts up
+  fit: [690, 748], // price-axis stretch + full price range across the flatten
+  linesOut: [698, 728], // hero lines fade before the table colours arrive
+  heat: [718, 748], // cyan glow -> the table's own cell colours
+  handoff: [752, 766],
+  pull: [704, 823],
+  chrome: [758, 792],
+  cap3: [774, 950], // 「钱是哪几天亏掉的？回到第一天。」 the table is already still
+  out: [950, 986], // == HOOK
 } as const;
 
 /** measured sub-pixel calibration of the 3D plane vs the DOM table (stills diff at f636) */
