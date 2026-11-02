@@ -19,7 +19,7 @@ export const NX = 161; // odd -> the centre column is the ATM row price
 export const CX = (NX - 1) / 2;
 export const X_HALF = 5;
 /** vertical exaggeration of profit height in the 3D phase (1 when flat) */
-export const Y_EXAG = 1; // hook-lab proportions: no extra vertical exaggeration
+export const Y_EXAG = 1; // no extra vertical exaggeration
 export const DEPTH = 9; // length of the date axis (world X, first day at the near end, z)
 export const ZC = DEPTH / 2;
 export const DEPTH_UNITS = 3.7;
@@ -73,7 +73,7 @@ export const Y_SCALE = DEPTH_UNITS / Math.abs(mn);
  * sinking over time instead of a tall standing wall next to a ground plane. Colours still use the raw profit.
  */
 export const WING = 0.5;
-export const shape = (h: number): number => h; // raw profit height, exactly like hook-lab (no wing compression)
+export const shape = (h: number): number => h; // raw profit height (no wing compression)
 export const HEIGHT = (j: number, i: number) => shape(PROFIT[j * NX + i] * Y_SCALE);
 /** exact (analytic, continuous) height of the price line at calendar fraction t */
 export const lineY = (t: number): number => shape(MODEL.profit(P_MID, softDte(DTE0 * (1 - Math.min(1, Math.max(0, t))))) * Y_SCALE);
