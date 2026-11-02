@@ -1,7 +1,7 @@
 import { MODEL } from "./data";
 import { DTE0 } from "./model/model";
 import { lerp } from "./timeline";
-import { B, mo } from "./beats";
+import { B, IV_CRUSH, IV_UP, mo } from "./beats";
 
 const T = MODEL.timeline;
 
@@ -13,17 +13,33 @@ const idxToDte = (x: number) => {
 };
 
 /**
- * One full pass, today → expiry, on B.sweep (linear in column index, so the
- * curve's own decay is what speeds up). Later the seller only steps back one
- * day, then the unflip returns that one day to the expiry V.
+ * One full pass, today → expiry, on B.sweep (linear in column index).
+ * After the drain, B.restore brings dte back to today for the IV act; then it holds.
  */
 export const dteAt = (f: number) => {
   if (f < B.sweep[0]) return DTE0;
   if (f < B.sweep[1]) return idxToDte((T.length - 1) * mo(f, B.sweep, (t) => t));
-  if (f < B.back1d[0]) return 0;
-  if (f < B.unflip[0]) return lerp(0, 1, mo(f, B.back1d));
-  return lerp(1, 0, mo(f, B.unflip));
+  if (f < B.restore[0]) return 0;
+  if (f < B.restore[1]) return lerp(0, DTE0, mo(f, B.restore));
+  return DTE0;
 };
 
-/** seller sign: 1 = buyer view, −1 = mirrored about zero */
-export const signAt = (f: number) => 1 - 2 * mo(f, B.flip) + 2 * mo(f, B.unflip);
+/**
+ * Calibrated-vol multiplier for the IV act.
+ * 1 until ivUp, rises to IV_UP, then crushes to IV_CRUSH and holds.
+ */
+export const volScaleAt = (f: number) => {
+  if (f < B.ivUp[0]) return 1;
+  if (f < B.ivCrush[0]) return lerp(1, IV_UP, mo(f, B.ivUp));
+  return lerp(IV_UP, IV_CRUSH, mo(f, B.ivCrush));
+};
+
+/** Absolute sigma for the live curve. */
+export const sigmaAt = (f: number) => MODEL.vol * volScaleAt(f);
+
+/** Ghost vol scale under the live curve (base during lift, peak during crush). */
+export const ghostScaleAt = (f: number) => {
+  if (f < B.ivUp[0]) return 1;
+  if (f < B.ivCrush[0]) return 1;
+  return IV_UP;
+};

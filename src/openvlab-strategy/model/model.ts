@@ -128,25 +128,25 @@ export const createModel = (chain: Chain) => {
   const basis = M * (chain.call.ask + chain.put.ask);
   const timeline = buildTimeline();
 
-  /** Strategy value (not profit) at underlying price S with `dte` days left. */
-  const value = (S: number, dte: number) => {
+  /** Strategy value (not profit) at underlying price S with `dte` days left. Optional `sigma` overrides calibrated vol (IV scenes). */
+  const value = (S: number, dte: number, sigma: number = vol) => {
     const r = getRate(chain.rates, dte);
-    return M * (optionPrice(true, S, K, dte, r, vol, r) + optionPrice(false, S, K, dte, r, vol, r));
+    return M * (optionPrice(true, S, K, dte, r, sigma, r) + optionPrice(false, S, K, dte, r, sigma, r));
   };
-  const profit = (S: number, dte: number) => value(S, dte) - basis;
+  const profit = (S: number, dte: number, sigma: number = vol) => value(S, dte, sigma) - basis;
 
   /** Break-evens at a given dte: scan for sign changes of profit and bisect each. */
-  const breakevens = (dte: number): number[] => {
+  const breakevens = (dte: number, sigma: number = vol): number[] => {
     const lo = K * 0.7;
     const hi = K * 1.3;
     const n = 600;
     const out: number[] = [];
-    let prev = profit(lo, dte);
+    let prev = profit(lo, dte, sigma);
     for (let i = 1; i <= n; i++) {
       const x0 = lo + ((hi - lo) * (i - 1)) / n;
       const x1 = lo + ((hi - lo) * i) / n;
-      const cur = profit(x1, dte);
-      if (Math.sign(cur) !== Math.sign(prev) && prev !== 0) out.push(bisect((s) => profit(s, dte), x0, x1));
+      const cur = profit(x1, dte, sigma);
+      if (Math.sign(cur) !== Math.sign(prev) && prev !== 0) out.push(bisect((s) => profit(s, dte, sigma), x0, x1));
       prev = cur;
     }
     return out;

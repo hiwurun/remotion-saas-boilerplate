@@ -11,12 +11,13 @@ import { FPS, H, HOOK, TOTAL, W } from "./timeline";
 export { FPS, H, TOTAL, W };
 
 /**
- * v8.1 「一秒之后，不只是少了一秒」 — 79.1 s (tightened from v8's 128.4 s).
- * Play -> 3D -> the 6550 row, day by day -> two brackets -> conclusion ->
- * auto morph table→curve -> one curve drag (6550 gap named, then drains to zero) -> seller's view ->
- * 1-day, −2% band -> last-day TV vs shock (不够赔) -> an open question about when a seller should step in ->
- * SoftBg wash -> elastic logo drop + left hop -> OpenVlab/theme slide-in -> f4744 == f0.
- * All frames are global (see beats.ts / open/timeline.ts). The bed is 20s and loops, fading on the last frames.
+ * v9 「IV 升降如何改写时间价值」 — ~67.8 s (TOTAL from beats.ts).
+ * Play -> 3D -> ATM 6550 row lit + fast day-over-day strip -> two brackets -> conclusion ->
+ * auto morph table→curve -> one TV drain to expiry -> restore today ->
+ * IV up (TV thickens) -> IV crush (spot fixed, TV shrinks) -> takeaway card ->
+ * SoftBg wash -> elastic logo drop + left hop -> OpenVlab/theme slide-in.
+ * Removed seller flip / 2% shock / 不够赔 / Gamma entry question.
+ * All frames are global (see beats.ts / open/timeline.ts). The bed loops, fading on the last frames.
  */
 export const OpenVlabStrategyVideo: React.FC<{ debug?: string }> = ({ debug = "" }) => {
   const f = useCurrentFrame();

@@ -1,26 +1,27 @@
 import React from "react";
 import { CameraState, worldToScreen } from "../../shared/components/Camera";
-import { EASE, EASE_OUT } from "../../shared/motion";
+import { EASE_OUT } from "../../shared/motion";
 import { MONO } from "../../shared/fonts";
 import { Caption } from "../components/Caption";
 import { DateSlider } from "../components/DateSlider";
+import { IvSlider } from "../components/IvSlider";
 import { MetricsBar } from "../components/MetricsBar";
 import { Panel } from "../components/Panel";
 import { CellFx, ProfitTable } from "../components/ProfitTable";
-import { StrategyChart, X_DOMAIN_END, X_DOMAIN_START, contentToWorld, makeScales } from "../components/StrategyChart";
+import { StrategyChart, X_DOMAIN_END, X_DOMAIN_START, contentToWorld, curvePts, makeScales, toPath } from "../components/StrategyChart";
 import { ATM_ROW, MODEL } from "../data";
 import { CONTENT, TABLE, colW, colX, nativeToWorld, rowY } from "../layout";
 import { C, THIN } from "../tokens";
-import { DTE0 } from "../model/model";
 import { easeIO, fadeWin, lerp, ramp } from "../timeline";
-import { B, HOOK, HOPS, mo } from "../beats";
-import { dteAt, signAt } from "../curve";
-import { TimeGap, TimeOverlay, thetaHotP } from "./TimeValue";
+import { B, DIFF_IN, DIFF_STAGGER, DIFF_START, IV_CRUSH, IV_UP, mo } from "../beats";
+import { dteAt, ghostScaleAt, sigmaAt, volScaleAt } from "../curve";
+import { TV_CRUSH, TV_UP, TimeGap, TimeOverlay, thetaHotP, vegaHotP } from "./TimeValue";
 
 /**
- * v8.1 app stage (GLOBAL frames, HOOK..B.lift): table walk on the 6550 row -> two brackets -> conclusion ->
- * auto table→curve morph -> one sweep (time-value bracket, ledger, then today → expiry) -> seller flip ->
- * 1-day band -> 2% shock vs last-day TV (不够赔) -> unflip back to the expiry V -> open question -> SoftBg+logo End.tsx.
+ * v9 app stage (GLOBAL frames, HOOK..B.lift):
+ * ATM row lit on entry → fast「较前一格」cascade → brackets → conclusion →
+ * auto morph → TV drain → restore today → IV up / IV crush → takeaway → SoftBg+logo End.tsx.
+ * Seller flip / 2% shock / 不够赔 / Gamma question removed.
  */
 
 const T = MODEL.timeline;
@@ -29,22 +30,12 @@ const FIRST = 2; // first date column
 const W = 1920;
 const H = 1080;
 const PX = 1.5; // native -> world
+const S = 6550;
 
 /* ---------------------------------------------------------------- data (all from the model) */
 const R = ROW.map((v) => Math.round(v));
 const FIRST_WEEK = R[0] - R[5]; // 7,617
 const LAST3 = R[13] - R[17]; // 11,027
-const P_DROP = 6550 * 0.98; // 6419 (−2 %)
-const P_UP = 6550 * 1.02; // 6681
-const SELL_1D = -MODEL.profit(6550, 1); // +32,718
-const SELL_1D_DROP = -MODEL.profit(P_DROP, 1); // +23,758
-const SELL_0 = -MODEL.profit(6550, 0); // +37,260
-const LAST_DAY = SELL_0 - SELL_1D; // 4,542
-const DROP = SELL_1D - SELL_1D_DROP; // 8,960
-/** one calendar day of time value at the open, and the yuan cost of a 2% drop now vs at expiry — all from the model */
-const TV_PER_DAY_NOW = Math.round(MODEL.value(6550, DTE0) - MODEL.value(6550, DTE0 - 1));
-const LOSS_NOW = Math.round(MODEL.profit(P_DROP, DTE0) - MODEL.profit(6550, DTE0));
-const LOSS_EXP = Math.round(MODEL.profit(P_DROP, 0) - MODEL.profit(6550, 0));
 
 const fmt = (v: number) => Math.abs(Math.round(v)).toLocaleString("en-US");
 /** signed with a true minus sign */
@@ -59,17 +50,12 @@ const domAt = (f: number) => {
   const p = mo(f, [B.sweep[0], B.sweep[0] + 180]);
   return [lerp(X_DOMAIN_START[0], X_DOMAIN_END[0], p), lerp(X_DOMAIN_START[1], X_DOMAIN_END[1], p)] as const;
 };
-const SC_END = makeScales(X_DOMAIN_END[0], X_DOMAIN_END[1]);
 
 /* ---------------------------------------------------------------- camera (world, 1:1 = {960,540,1}) */
 const ONE: CameraState = { x: 960, y: 540, scale: 1 };
 const ROW_Y = rowY(ATM_ROW) + TABLE.rowH / 2; // content-native
 const ATM_WORLD_Y = nativeToWorld(0, CONTENT.y + ROW_Y).y;
 const TABLE_CAM: CameraState = { x: 960, y: ATM_WORLD_Y + 6, scale: 1.2 };
-const PUSH_CAM: CameraState = (() => {
-  const p = contentToWorld({ x: SC_END.x(6545), y: SC_END.y(31500) });
-  return { x: p.x, y: p.y, scale: 3.3 };
-})();
 const camLerp = (a: CameraState, b: CameraState, t: number): CameraState => ({
   x: lerp(a.x, b.x, t),
   y: lerp(a.y, b.y, t),
@@ -77,28 +63,17 @@ const camLerp = (a: CameraState, b: CameraState, t: number): CameraState => ({
 });
 export const stageCamera = (f: number): CameraState => {
   if (f < B.camOut[0]) return camLerp(ONE, TABLE_CAM, mo(f, B.camIn));
-  if (f < B.push[0]) return camLerp(TABLE_CAM, ONE, mo(f, B.camOut));
-  if (f < B.pull[0]) return camLerp(ONE, PUSH_CAM, mo(f, B.push));
-  return camLerp(PUSH_CAM, ONE, mo(f, B.pull));
+  return camLerp(TABLE_CAM, ONE, mo(f, B.camOut));
 };
 const toScreen = (nx: number, ny: number, cam: CameraState) => worldToScreen(contentToWorld({ x: nx, y: ny }), cam, W, H);
 
-/* ---------------------------------------------------------------- table walk */
+/* ---------------------------------------------------------------- table (ATM + diff strip + brackets) */
 const cellCX = (c: number) => colX(c) + colW(c) / 2;
 const ROW_X0 = cellCX(FIRST);
 const ROW_X1 = cellCX(FIRST + T.length - 1);
 const FROM_PTS = Array.from({ length: 181 }, (_, i) => ({ x: lerp(ROW_X0, ROW_X1, i / 180), y: ROW_Y }));
 
-const hopProgress = (f: number) => {
-  let h = 0;
-  for (let k = 1; k < HOPS.length; k++) {
-    const gap = HOPS[k] - HOPS[k - 1];
-    const w = Math.min(22, Math.max(8, Math.round(gap * 0.45)));
-    h += ramp(f, HOPS[k] - w, HOPS[k], EASE);
-  }
-  return h;
-};
-/** walk decorations leave with the table as the auto morph begins */
+/** table decorations leave with the table as the auto morph begins */
 const walkOut = (f: number) => 1 - ramp(f, B.morph[0] - 6, B.morph[0] + 16, easeIO);
 
 const BR_Y = rowY(ATM_ROW + 1) + 6; // bracket line (content-native)
@@ -139,12 +114,13 @@ const WalkOverlay: React.FC<{ f: number }> = ({ f }) => {
       <div style={{ position: "absolute", left: 0, top: atmTop - stripH, width: colX(FIRST), height: stripH, lineHeight: `${stripH}px`, textAlign: "right", paddingRight: 5, boxSizing: "border-box", fontSize: 11, color: C.mutedFg, opacity: stripOp, whiteSpace: "nowrap" }}>较前一格</div>
       {T.map((_, k) => {
         if (k === 0) return null;
-        const e = ramp(f, HOPS[k] - 4, HOPS[k] + 6, EASE_OUT);
+        const a = DIFF_START + (k - 1) * DIFF_STAGGER;
+        const e = ramp(f, a, a + DIFF_IN, EASE_OUT);
         if (e <= 0.001) return null;
         const v = R[k] - R[k - 1];
         const c = FIRST + k;
         return (
-          <div key={k} style={{ position: "absolute", left: colX(c) - 2, top: atmTop - stripH, width: colW(c) + 4, height: stripH, lineHeight: `${stripH}px`, textAlign: "center", fontSize: 13, fontWeight: 700, color: pnlColor(v), fontVariantNumeric: "tabular-nums", letterSpacing: -0.5, whiteSpace: "nowrap", opacity: e * out, transform: `translateY(${(1 - e) * 5}px)` }}>
+          <div key={k} style={{ position: "absolute", left: colX(c) - 2, top: atmTop - stripH, width: colW(c) + 4, height: stripH, lineHeight: `${stripH}px`, textAlign: "center", fontSize: 13, fontWeight: 700, color: pnlColor(v), fontVariantNumeric: "tabular-nums", letterSpacing: -0.5, whiteSpace: "nowrap", opacity: e * out, transform: `translateY(${(1 - e) * 5}px) scale(${0.92 + 0.08 * e})` }}>
             {fmtS(v)}
           </div>
         );
@@ -177,7 +153,7 @@ const WalkOverlay: React.FC<{ f: number }> = ({ f }) => {
 };
 
 /* ---------------------------------------------------------------- chart annotations (content-native, inside the panel) */
-const ChartMarks: React.FC<{ f: number; cam: CameraState; x0: number; x1: number; s: number; dte: number }> = ({ f, cam, x0, x1, s, dte }) => {
+const ChartMarks: React.FC<{ f: number; cam: CameraState; x0: number; x1: number; dte: number; sigma: number }> = ({ f, cam, x0, x1, dte, sigma }) => {
   const sc = makeScales(x0, x1);
   const k = 1 / (PX * cam.scale); // screen px -> native
   const fs = 30 * k;
@@ -188,73 +164,74 @@ const ChartMarks: React.FC<{ f: number; cam: CameraState; x0: number; x1: number
         <div style={{ fontFamily: MONO, fontSize: fs, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{text}</div>
       </div>
     ) : null;
-  const markOut = 1 - ramp(f, B.pull[0], B.pull[0] + 24, easeIO);
-  /* 6550 dot */
-  const v = s * MODEL.profit(6550, dte);
+  const markOut = 1 - ramp(f, B.dimIv[0], B.dimIv[0] + 24, easeIO);
+  const v = MODEL.profit(S, dte, sigma);
   const dotOp = ramp(f, B.morph[1] + 4, B.morph[1] + 22) * markOut;
-  const labOp = dotOp * (1 - ramp(f, B.flip[0] - 6, B.flip[0] + 6) + ramp(f, B.flip[1] - 2, B.flip[1] + 10));
-  const dx = sc.x(6550);
+  const labOp = dotOp * (1 - ramp(f, B.ivUp[0] - 10, B.ivUp[0] + 16, easeIO)); // hide ATM PnL label once IV HUD takes over
+  const dx = sc.x(S);
   const dy = sc.y(v);
-  /* gap marker: 1-day curve vs expiry line at 6550 */
-  const gapOp = mo(f, B.gap) * (1 - ramp(f, B.push[0] + 4, B.push[0] + 24, easeIO));
-  const yExp = sc.y(SELL_0);
-  /* band + drop */
-  const bandOp = mo(f, B.push) * markOut;
-  const dropP = mo(f, B.drop);
-  const ddx = sc.x(P_DROP);
-  const ddy = sc.y(-MODEL.profit(P_DROP, 1));
   const r = 6 * k;
-  const sellerChip = mo(f, B.flip) * (1 - mo(f, B.unflip));
+  const ivChip = ramp(f, B.ivHook[0], B.ivHook[1], easeIO) * markOut;
+  const crushOn = f >= B.ivCrush[0];
   return (
     <div style={{ position: "absolute", left: CONTENT.x, top: CONTENT.y, width: CONTENT.w, height: 440, pointerEvents: "none" }}>
-      {sellerChip > 0.001 && (
-        <div style={{ position: "absolute", right: 28, top: 2, opacity: sellerChip * markOut, padding: "2px 10px", borderRadius: 4, background: "rgba(234,57,67,0.14)", border: `1px solid rgba(234,57,67,0.5)`, color: C.red, fontSize: 15, fontWeight: 600 }}>卖方视角</div>
+      {ivChip > 0.001 && (
+        <div
+          style={{
+            position: "absolute",
+            right: 28,
+            top: 2,
+            opacity: ivChip,
+            padding: "2px 10px",
+            borderRadius: 4,
+            background: crushOn ? "rgba(22,199,132,0.14)" : "rgba(22,199,132,0.14)",
+            border: `1px solid rgba(22,199,132,0.55)`,
+            color: C.vega,
+            fontSize: 15,
+            fontWeight: 600,
+          }}
+        >
+          {crushOn ? "IV crush" : f >= B.ivUp[0] ? "IV 抬升" : "隐含波动率"}
+        </div>
       )}
       <svg width={CONTENT.w} height={440} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
-        {bandOp > 0.001 && (
-          <g opacity={bandOp}>
-            <rect x={sc.x(P_DROP)} y={34} width={sc.x(P_UP) - sc.x(P_DROP)} height={380} fill="rgba(255,255,255,0.055)" />
-            <line x1={sc.x(P_DROP)} x2={sc.x(P_DROP)} y1={34} y2={414} stroke="rgba(255,255,255,0.4)" strokeWidth={1.5 * k} strokeDasharray={`${5 * k},${4 * k}`} />
-            <line x1={sc.x(P_UP)} x2={sc.x(P_UP)} y1={34} y2={414} stroke="rgba(255,255,255,0.4)" strokeWidth={1.5 * k} strokeDasharray={`${5 * k},${4 * k}`} />
-          </g>
-        )}
-        {gapOp > 0.001 && (
-          <g opacity={gapOp}>
-            <line x1={dx} x2={dx} y1={yExp} y2={dy} stroke={C.red} strokeWidth={2 * k} />
-            <line x1={dx - 6 * k} x2={dx + 6 * k} y1={yExp} y2={yExp} stroke={C.red} strokeWidth={2 * k} />
-          </g>
-        )}
-        {dropP > 0.001 && (
-          <g opacity={dropP * markOut}>
-            <line x1={dx} x2={ddx} y1={dy} y2={dy} stroke="rgba(255,255,255,0.55)" strokeWidth={1.5 * k} strokeDasharray={`${4 * k},${3 * k}`} />
-            <line x1={ddx} x2={ddx} y1={dy} y2={lerp(dy, ddy, dropP)} stroke={C.green} strokeWidth={2.5 * k} />
-            <circle cx={ddx} cy={lerp(dy, ddy, dropP)} r={r} fill={C.green} stroke="#0b0c0e" strokeWidth={2 * k} />
-          </g>
-        )}
         {dotOp > 0.001 && <circle cx={dx} cy={dy} r={r} fill={pnlColor(v)} stroke="#0b0c0e" strokeWidth={2 * k} opacity={dotOp} />}
       </svg>
-      {label(dx + 14 * k, dy - 34 * k, fmtS(v), pnlColor(v), "l", labOp * (1 - gapOp) * (1 - ramp(f, B.push[0], B.push[0] + 16)), "v")}
-      {label(dx - 16 * k, lerp(yExp, dy, 0.5), `+${fmt(LAST_DAY)}`, C.red, "r", gapOp, "gap", "最后一天")}
-      {/* push-in: the two seller values + the drop */}
-      {label(dx + 14 * k, dy - 30 * k, fmtS(SELL_1D), C.red, "l", ramp(f, B.push[0] + 10, B.push[1]) * markOut, "s1", "6550 · 剩 1 天")}
-      {label(ddx - 14 * k, ddy + 50 * k, fmtS(SELL_1D_DROP), C.red, "r", ramp(dropP, 0.6, 1) * markOut, "s2", "跌 2% → 6419")}
-      {label(ddx - 14 * k, lerp(dy, ddy, 0.5), `\u2212${fmt(DROP)}`, C.green, "r", ramp(dropP, 0.5, 1) * markOut, "drop")}
-      {bandOp > 0.001 && (
-        <>
-          <div style={{ position: "absolute", left: sc.x(P_DROP), top: 414 - 30 * k, transform: "translateX(-50%)", fontSize: 20 * k, color: C.mutedFg, opacity: bandOp, whiteSpace: "nowrap" }}>−2%</div>
-          <div style={{ position: "absolute", left: sc.x(P_UP), top: 414 - 30 * k, transform: "translateX(-50%)", fontSize: 20 * k, color: C.mutedFg, opacity: bandOp, whiteSpace: "nowrap" }}>+2%</div>
-        </>
-      )}
+      {label(dx + 14 * k, dy - 34 * k, fmtS(v), pnlColor(v), "l", labOp, "v")}
     </div>
+  );
+};
+
+/** Ghost of the previous IV curve while vol is moving. */
+const IvGhost: React.FC<{ f: number; x0: number; x1: number; dte: number }> = ({ f, x0, x1, dte }) => {
+  const show = ramp(f, B.ivUp[0], B.ivUp[0] + 16, easeIO) * (1 - ramp(f, B.dimIv[0] - 6, B.dimIv[0] + 20, easeIO));
+  if (show < 0.001) return null;
+  const ghostSigma = MODEL.vol * ghostScaleAt(f);
+  const liveSigma = sigmaAt(f);
+  // only draw when it still differs from the live curve
+  if (Math.abs(ghostSigma - liveSigma) < 1e-6) return null;
+  const pts = curvePts(
+    {
+      ...MODEL,
+      profit: (p: number, d: number) => MODEL.profit(p, d, ghostSigma),
+      value: (p: number, d: number) => MODEL.value(p, d, ghostSigma),
+      breakevens: (d: number) => MODEL.breakevens(d, ghostSigma),
+    },
+    dte,
+    x0,
+    x1,
+  );
+  return (
+    <svg width={CONTENT.w} height={440} style={{ position: "absolute", left: CONTENT.x, top: CONTENT.y, overflow: "visible", opacity: 0.45 * show, pointerEvents: "none" }}>
+      <path d={toPath(pts)} fill="none" stroke="rgba(230,232,236,0.55)" strokeWidth={2} strokeDasharray="7 6" strokeLinecap="round" />
+    </svg>
   );
 };
 
 /* ---------------------------------------------------------------- the stage (inside the camera) */
 export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) => {
-  const h = hopProgress(f);
   const out = walkOut(f);
-  const focusOn = ramp(f, HOOK + 16, HOPS[0]) * out;
-  const colOn = mo(f, B.dim) * out;
+  // ATM row fully lit from first AppStage frame (matches Opening handoff light=1); no day-by-day focus walk
   const scatter = mo(f, [B.morph[0], B.morph[0] + 42]);
   const atmFade = ramp(f, B.morph[0] + 2, B.morph[0] + 16);
   const tableOn = f < B.morph[1] + 10;
@@ -262,10 +239,6 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
   const cellFx = (r: number, c: number): CellFx => {
     const isAtm = r === ATM_ROW;
     const sc = isAtm ? 0 : scatter;
-    const colW_ = c >= FIRST ? Math.max(0, 1 - Math.abs(c - FIRST - h)) : 0;
-    const light = Math.max(isAtm ? out : 0, colW_ * colOn);
-    const focus = isAtm && c >= FIRST ? colW_ * focusOn : 0;
-    const trail = isAtm && c >= FIRST ? Math.min(1, Math.max(0, h - (c - FIRST) + 0.2)) * focusOn : 0;
     const hs = (k: number) => {
       const x = Math.sin(r * 127.1 + c * 311.7 + k * 74.7) * 43758.5453;
       return x - Math.floor(x);
@@ -275,9 +248,9 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
       dx: (hs(1) - 0.5) * 220 * sc,
       dy: (hs(2) - 0.5) * 160 * sc,
       s: 1 - 0.35 * sc,
-      focus,
-      light,
-      trail,
+      focus: 0,
+      light: isAtm ? out : 0,
+      trail: 0,
       text: 1,
     };
   };
@@ -287,15 +260,23 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
   const chartOn = f >= B.morph[0];
   const [x0, x1] = domAt(f);
   const dte = dteAt(f);
-  const s = signAt(f);
-  const model = s === 1 ? MODEL : { ...MODEL, profit: (p: number, d: number) => s * MODEL.profit(p, d) };
+  const sigma = sigmaAt(f);
+  const model = {
+    ...MODEL,
+    profit: (p: number, d: number) => MODEL.profit(p, d, sigma),
+    value: (p: number, d: number) => MODEL.value(p, d, sigma),
+    breakevens: (d: number) => MODEL.breakevens(d, sigma),
+  };
   const morph = f < B.morph[1] + 30 ? { from: FROM_PTS, lime: 1 - ramp(f, B.morph[1] - 18, B.morph[1] + 4), p: () => mo(f, B.morph) } : undefined;
   const panelOp = 1 - ramp(f, B.lift[0], B.lift[0] + 54, easeIO);
-  const clean = 1 - mo(f, B.unflip); // markers / legend leave for the ending
+  const clean = 1 - ramp(f, B.dimIv[0], B.dimIv[0] + 28, easeIO);
+  const thetaP = thetaHotP(f);
+  const vegaP = vegaHotP(f);
+  const hot = vegaP > 0.001 ? { key: "vega", p: vegaP } : thetaP > 0.001 ? { key: "theta", p: thetaP } : undefined;
 
   return (
     <Panel op={panelOp} titleOp={1}>
-      <MetricsBar model={MODEL} reveal={() => 1} count={1} beSep=" · " staticKeys={["be"]} hot={{ key: "theta", p: thetaHotP(f) }} />
+      <MetricsBar model={MODEL} reveal={() => 1} count={1} beSep=" · " staticKeys={["be"]} hot={hot} />
       {tableOn ? <ProfitTable model={MODEL} fx={cellFx} headerOp={headerOp} lineP={lineP} /> : null}
       {f < B.morph[0] + 24 ? <WalkOverlay f={f} /> : null}
       {chartOn ? (
@@ -308,17 +289,27 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
             axesOp={ramp(f, B.morph[0] + 16, B.morph[1] + 4)}
             legendOp={ramp(f, B.morph[1] - 2, B.morph[1] + 28) * (1 - ramp(f, B.sweep[1] - 30, B.sweep[1] + 10))}
             markerOp={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * clean}
-            beOp={1 - ramp(f, B.flip[0], B.flip[0] + 20)}
-            midOp={1 - ramp(f, B.unflip[0], B.unflip[1], easeIO)}
+            beOp={1}
+            midOp={1 - ramp(f, B.ivUp[0], B.ivUp[0] + 24, easeIO)}
             fillOp={ramp(f, B.morph[0] + 30, B.morph[1] + 22) * (1 - ramp(f, B.lift[0], B.lift[0] + 40, easeIO))}
-            lineOp={1 - ramp(f, B.lift[0], B.lift[0] + 48, easeIO) /* fade with SoftBg wash; End no longer draws a proxy V */}
+            lineOp={1 - ramp(f, B.lift[0], B.lift[0] + 48, easeIO)}
             draw={1}
             morph={morph}
-            secondaryOp={ramp(f, B.morph[1] - 2, B.morph[1] + 28)}
+            secondaryOp={ramp(f, B.morph[1] - 2, B.morph[1] + 28) * (1 - ramp(f, B.ivUp[0], B.ivUp[0] + 24, easeIO))}
           />
-          <ChartMarks f={f} cam={cam} x0={x0} x1={x1} s={s} dte={dte} />
+          <IvGhost f={f} x0={x0} x1={x1} dte={dte} />
+          <ChartMarks f={f} cam={cam} x0={x0} x1={x1} dte={dte} sigma={sigma} />
           <TimeGap f={f} dte={dte} />
-          <DateSlider model={MODEL} dte={dte} op={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * (1 - ramp(f, B.ask[0] - 6, B.ask[0] + 18, easeIO))} />
+          <DateSlider
+            model={MODEL}
+            dte={dte}
+            op={ramp(f, B.morph[1] - 8, B.morph[1] + 22) * (1 - ramp(f, B.restore[1] - 16, B.ivHook[0] + 18, easeIO))}
+          />
+          <IvSlider
+            baseVol={MODEL.vol}
+            multiplier={volScaleAt(f)}
+            op={ramp(f, B.ivHook[0], B.ivHook[1], easeIO) * (1 - ramp(f, B.dimIv[0] - 10, B.dimIv[0] + 18, easeIO))}
+          />
         </>
       ) : null}
     </Panel>
@@ -336,17 +327,12 @@ export const StageOverlay: React.FC<{ f: number }> = ({ f }) => {
   const concOut = mo(f, B.concOut);
   const concDim = 0.88 * conc * (1 - concOut);
   const lineP = mo(f, B.concLine) * (1 - concOut);
-  // dim stays through the answer card (it deepens a touch once the numbers are up), then clears for the gap
-  const qDim = mo(f, B.pull) * (1 - mo(f, B.ansOut)) * lerp(0.62, 0.78, mo(f, B.ans));
-  const askIn = mo(f, B.ask);
-  const askOut = mo(f, B.askOut);
-  const askP = askIn * (1 - askOut);
-  const askDim = ramp(f, B.ask[0] - 10, B.ask[0] + 28, easeIO) * (1 - askOut) * 0.8;
-  const echo = ramp(f, B.ask[1] + 72, B.ask[1] + 132, easeIO) * (1 - askOut);
+  const qDim = mo(f, B.dimIv) * (1 - mo(f, B.ansOut)) * lerp(0.62, 0.78, mo(f, B.ans));
   return (
     <>
       {concDim > 0.001 && <div style={{ position: "absolute", inset: 0, background: `rgba(0,0,0,${concDim})` }} />}
-      {conc > 0.001 && concOut < 0.999 &&
+      {conc > 0.001 &&
+        concOut < 0.999 &&
         BIG.map((b) => {
           const from = toScreen(brLabelC(b.i).x, brLabelC(b.i).y, TABLE_CAM);
           const x = lerp(from.x, b.x, conc);
@@ -367,31 +353,6 @@ export const StageOverlay: React.FC<{ f: number }> = ({ f }) => {
         </div>
       )}
       {qDim > 0.001 && <div style={{ position: "absolute", inset: 0, background: `rgba(0,0,0,${qDim})` }} />}
-      {askDim > 0.001 && <div style={{ position: "absolute", inset: 0, background: `rgba(0,0,0,${askDim})` }} />}
-      {askP > 0.001 &&
-        ["所以，如果想做卖方，应该在什么阶段介入，", "才能既最大程度地收取时间价值，又控制住 Gamma 风险？"].map((t, i) => (
-          <div key={t} style={{ position: "absolute", left: 0, width: W, top: 268 + i * 104, height: 96, overflow: "hidden" }}>
-            <div style={{ textAlign: "center", fontFamily: THIN, fontWeight: 400, fontSize: 52, lineHeight: "96px", letterSpacing: "0.03em", color: "#fff", whiteSpace: "nowrap", transform: `translateY(${(1 - ramp(askIn, i * 0.16, 1)) * 90}px)`, opacity: Math.min(1, ramp(askIn, i * 0.16, 1) * 1.6) * (1 - askOut) }}>{t}</div>
-          </div>
-        ))}
-      {echo > 0.001 && (
-        <div style={{ position: "absolute", left: 0, width: W, top: 520, textAlign: "center", opacity: echo, pointerEvents: "none" }}>
-          <div style={{ fontFamily: THIN, fontSize: 26, letterSpacing: "0.16em", color: "rgba(230,232,236,0.8)", marginBottom: 18 }}>临近到期，Theta 与 Gamma 一起变大</div>
-          <div style={{ display: "flex", justifyContent: "center", gap: 72 }}>
-            {[
-              ["一天的时间价值", TV_PER_DAY_NOW, LAST_DAY],
-              ["跌 2% 要赔", LOSS_NOW, LOSS_EXP],
-            ].map(([label, a, b]) => (
-              <div key={String(label)} style={{ textAlign: "left" }}>
-                <div style={{ fontFamily: THIN, fontSize: 20, letterSpacing: "0.14em", color: C.mutedFg, marginBottom: 6 }}>{label}</div>
-                <div style={{ fontFamily: MONO, fontSize: 34, fontWeight: 600, color: C.theta, fontVariantNumeric: "tabular-nums" }}>
-                  {fmt(Number(a))} <span style={{ color: "rgba(230,232,236,0.45)", fontWeight: 400 }}>→</span> {fmt(Number(b))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       <TimeOverlay f={f} />
     </>
   );
@@ -403,8 +364,8 @@ export const StageCaptions: React.FC<{ f: number }> = ({ f }) => (
     <Caption text="价格不动，少掉的这一截，叫时间价值。" p={fadeWin(f, B.capName[0], B.capName[1], 24)} />
     <Caption text="每过一天往下压一截，越往后压得越深。" p={fadeWin(f, B.capSweep[0], B.capSweep[1], 24)} />
     <Caption text="越近到期，掉得越快。到期那一刻，它是零。" p={fadeWin(f, B.capDrain[0], B.capDrain[1], 24)} />
-    <Caption text={`反过来看：这些钱进了卖方口袋。最后一天就有 ${fmt(LAST_DAY)} 元。`} p={fadeWin(f, B.capSeller[0], B.capSeller[1], 24)} />
-    <Caption text={`只剩 1 天：价格跌 2%（约 131 点），卖方就要赔 ${fmt(DROP)} 元。`} p={fadeWin(f, B.capBand[0], B.capBand[1], 24)} />
+    <Caption text="但时间价值不只听日历。隐含波动率一变，它也会变。" p={fadeWin(f, B.capIvHook[0], B.capIvHook[1], 24)} />
+    <Caption text={`IV 抬升到 ${(MODEL.vol * IV_UP * 100).toFixed(1)}%，时间价值涨到 ${fmt(TV_UP)}。`} p={fadeWin(f, B.capIvUp[0], B.capIvUp[1], 24)} />
+    <Caption text={`IV crush 到 ${(MODEL.vol * IV_CRUSH * 100).toFixed(1)}%：标的不动，时间价值只剩 ${fmt(TV_CRUSH)}。`} p={fadeWin(f, B.capIvCrush[0], B.capIvCrush[1], 24)} />
   </>
 );
-
