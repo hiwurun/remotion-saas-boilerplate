@@ -31,7 +31,7 @@ export const curvePts = (model: Model, dte: number, x0: number, x1: number, n = 
 };
 
 export const toPath = (pts: Pt[]) => pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
-/** CONTENT-native point -> 1920x1080 world. */
+
 export const contentToWorld = (p: Pt) => nativeToWorld(CONTENT.x + p.x, CONTENT.y + p.y);
 
 export const lineDtesFor = (dte: number) => [dte, 0.25 * DTE0, 0].filter((d, i) => i === 0 || d <= dte);
@@ -86,6 +86,7 @@ export const StrategyChart: React.FC<ChartProps> = ({ model, dte, x0, x1, axesOp
     return { d, pts, path: toPath(pts) };
   });
   const area = `${lines[0].path} L${f2(lines[0].pts[lines[0].pts.length - 1].x)},${f2(zeroY)} L${f2(lines[0].pts[0].x)},${f2(zeroY)} Z`;
+
 
   const be = model.breakevens(dte);
   const price = CHAIN.underlyingLast;
@@ -159,8 +160,27 @@ export const StrategyChart: React.FC<ChartProps> = ({ model, dte, x0, x1, axesOp
             return <path key={l.d} d={l.path} fill="none" stroke="url(#scStroke)" strokeWidth={2} strokeLinecap="round" strokeDasharray={mid ? "7,4" : "2,3"} opacity={(mid ? 0.8 * midOp : 0.65) * secondaryOp * k} />;
           })}
           <path d={area} fill="url(#scFill)" mask="url(#scFillMask)" opacity={0.8 * fillOp * (1 - morphLime)} />
-          {lineOp > 0 && <path d={lines[0].path} fill="none" stroke="url(#scStroke)" strokeWidth={2} strokeLinecap="round" opacity={(1 - morphLime) * lineOp} />}
-          {morph ? <path d={lines[0].path} fill="none" stroke={C.primary} strokeWidth={2.5} strokeLinecap="round" opacity={morphLime} /> : null}
+          {/* Morph handoff: solid profit-red first (no green flash from ATM-row Y or loss trough), then crossfade into the red/green PnL gradient. */}
+          {lineOp > 0 && morph && (
+            <path
+              d={lines[0].path}
+              fill="none"
+              stroke={C.chartUp}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              opacity={lineOp * morphLime}
+            />
+          )}
+          {lineOp > 0 && (
+            <path
+              d={lines[0].path}
+              fill="none"
+              stroke="url(#scStroke)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              opacity={lineOp * (morph ? 1 - morphLime : 1)}
+            />
+          )}
         </g>
       </g>
 

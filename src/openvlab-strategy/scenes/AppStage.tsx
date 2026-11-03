@@ -74,7 +74,7 @@ const ROW_X1 = cellCX(FIRST + T.length - 1);
 const FROM_PTS = Array.from({ length: 181 }, (_, i) => ({ x: lerp(ROW_X0, ROW_X1, i / 180), y: ROW_Y }));
 
 /** table decorations leave with the table as the auto morph begins */
-const walkOut = (f: number) => 1 - ramp(f, B.morph[0] - 6, B.morph[0] + 16, easeIO);
+const walkOut = (f: number) => 1 - ramp(f, B.morph[0] - 36, B.morph[0] - 4, easeIO);
 
 const BR_Y = rowY(ATM_ROW + 1) + 6; // bracket line (content-native)
 const BR_FS = 20; // bracket label font (native)
@@ -233,7 +233,9 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
   const out = walkOut(f);
   // ATM row fully lit from first AppStage frame (matches Opening handoff light=1); no day-by-day focus walk
   const scatter = mo(f, [B.morph[0], B.morph[0] + 42]);
-  const atmFade = ramp(f, B.morph[0] + 2, B.morph[0] + 16);
+  // Kill brand-lime wash + ATM cells before the stroke takes over — otherwise the handoff reads as a green flash then a red line
+  const atmLight = 1 - ramp(f, B.morph[0] - 48, B.morph[0] - 12, easeIO);
+  const atmFade = ramp(f, B.morph[0] - 6, B.morph[0] + 10);
   const tableOn = f < B.morph[1] + 10;
 
   const cellFx = (r: number, c: number): CellFx => {
@@ -249,7 +251,7 @@ export const AppStage: React.FC<{ f: number; cam: CameraState }> = ({ f, cam }) 
       dy: (hs(2) - 0.5) * 160 * sc,
       s: 1 - 0.35 * sc,
       focus: 0,
-      light: isAtm ? out : 0,
+      light: isAtm ? atmLight : 0,
       trail: 0,
       text: 1,
     };
