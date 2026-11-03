@@ -3,6 +3,7 @@ import { spring } from "remotion";
 import { BrandMark } from "../../openvlab-market/components/BrandMark";
 import { SoftBg } from "../open/LightStage";
 import { SANS } from "../../shared/fonts";
+import { BRAND } from "../Cover";
 import { B, mo } from "../beats";
 import { FPS } from "../timeline";
 
@@ -114,6 +115,7 @@ export const End: React.FC<{ f: number }> = ({ f }) => {
             position: "absolute",
             left: copyLeft + wordSlideX,
             top: wordTop,
+            fontFamily: BRAND,
             fontSize: WORD_SIZE,
             fontWeight: 700,
             letterSpacing: "-0.045em",

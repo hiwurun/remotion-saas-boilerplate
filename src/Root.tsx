@@ -11,6 +11,7 @@ import { OpenVlabSurfVideo } from "./openvlab-surf/OpenVlabSurfVideo";
 import { OpenVlabSurfCover, OpenVlabSurfCover43, OpenVlabSurfCover34 } from "./openvlab-surf/Cover";
 import { OpenVlabCloudVideo, FPS as CLOUD_FPS, H as CLOUD_H, TOTAL as CLOUD_TOTAL, W as CLOUD_W } from "./openvlab-cloud/OpenVlabCloudVideo";
 import { OpenVlabStrategyVideo, FPS as STRATEGY_FPS, H as STRATEGY_H, TOTAL as STRATEGY_TOTAL, W as STRATEGY_W } from "./openvlab-strategy/OpenVlabStrategyVideo";
+import { OpenVlabStrategyCover } from "./openvlab-strategy/Cover";
 import { LegendBotVideo, FPS as LEGEND_FPS, H as LEGEND_H, TOTAL as LEGEND_TOTAL, W as LEGEND_W } from "./legend-bot/LegendBotVideo";
 import { FPS as SURF_FPS, H as SURF_H, TOTAL as SURF_TOTAL, W as SURF_W } from "./openvlab-surf/timeline";
 
@@ -188,6 +189,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition id="openvlab-cloud" component={OpenVlabCloudVideo} width={CLOUD_W} height={CLOUD_H} fps={CLOUD_FPS} durationInFrames={CLOUD_TOTAL} />
       <Composition id="openvlab-strategy" component={OpenVlabStrategyVideo} defaultProps={{ debug: "" }} width={STRATEGY_W} height={STRATEGY_H} fps={STRATEGY_FPS} durationInFrames={STRATEGY_TOTAL} />
       <Composition id="legend-bot" component={LegendBotVideo} width={LEGEND_W} height={LEGEND_H} fps={LEGEND_FPS} durationInFrames={LEGEND_TOTAL} />
+      <Still id="openvlab-strategy-cover" component={OpenVlabStrategyCover} width={1920} height={1080} />
       <Still id="openvlab-surf-cover-16x9" component={OpenVlabSurfCover} width={1920} height={1080} />
       <Still id="openvlab-surf-cover-4x3" component={OpenVlabSurfCover43} width={1440} height={1080} />
       <Still id="openvlab-surf-cover-3x4" component={OpenVlabSurfCover34} width={1080} height={1440} />
