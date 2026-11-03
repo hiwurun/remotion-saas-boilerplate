@@ -1,22 +1,17 @@
 import React from "react";
 import { AbsoluteFill, Img, staticFile } from "remotion";
-import { loadFont as loadOutfit } from "@remotion/google-fonts/Outfit";
 import { BrandMark } from "../openvlab-market/components/BrandMark";
+import { SANS } from "../shared/fonts";
 
-const outfit = loadOutfit("normal", {
-  weights: ["600", "700"],
-  subsets: ["latin"],
-}).fontFamily;
-
-/** Brand wordmark for OpenVlab lockups (cover + ending). */
-export const BRAND = `${outfit}, "Helvetica Neue", Arial, sans-serif`;
+/** Brand wordmark — same stack as openvlab-surf Cover (Geist / SANS). */
+export const BRAND = SANS;
 
 const W = 1920;
 const H = 1080;
 
 /**
  * Strategy cover Still — art from public/openvlab-strategy/covers/cover-art.jpg
- * (title + 3D surface), brand lockup top-left: logo.svg + OpenVlab in Outfit.
+ * (title + 3D surface), brand lockup top-left: logo.svg + OpenVlab in SANS.
  */
 export const OpenVlabStrategyCover: React.FC = () => {
   const mark = 96;
